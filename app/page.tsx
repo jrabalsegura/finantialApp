@@ -269,6 +269,9 @@ export default async function Home() {
             <Link className="nav-link" href="/history">
               Histórico
             </Link>
+            <Link className="nav-link" href="/settings/backup">
+              Configuración
+            </Link>
           </nav>
         </header>
 
