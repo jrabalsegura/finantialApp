@@ -28,6 +28,13 @@ La Fase 3 añade registro básico de movimientos:
 - Actualización de saldos de cuentas al registrar movimientos.
 - Listado básico de movimientos recientes.
 
+La Fase 4 añade gastos reembolsables y pendientes de cobrar:
+
+- Pantalla `/reimbursements` para crear y revisar pendientes.
+- Gasto reembolsable que baja saldo real sin contar como gasto personal.
+- Cobro total o parcial que sube saldo real sin contar como ingreso personal.
+- Conversión del importe pendiente en gasto real sin duplicar el movimiento bancario.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -99,9 +106,9 @@ El seed crea estas cuentas:
 
 También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
 
-## Pendiente para Fase 4
+## Pendiente para Fase 5
 
-- Layout de aplicacion y navegacion.
+- Layout de aplicación y navegación.
 - Dashboard inicial.
 - CRUD de cuentas, categorías y movimientos.
-- Flujos de reembolsos, ahorro, cierre mensual e histórico.
+- Ahorro, cierre mensual e histórico.

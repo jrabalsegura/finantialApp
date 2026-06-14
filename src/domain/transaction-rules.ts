@@ -4,6 +4,9 @@ import {
 } from "./financial-calculations";
 
 export type QuickTransactionType = "expense" | "income" | "transfer";
+export type ReimbursementTransactionType =
+  | "reimbursable_expense"
+  | "reimbursement_income";
 
 export type AccountBalanceDelta = {
   accountId: string;
@@ -20,6 +23,17 @@ export type QuickTransactionInput = {
 export type QuickTransactionRules = {
   impact: TransactionImpact;
   balanceDeltas: AccountBalanceDelta[];
+};
+
+export type ReimbursementTransactionInput = {
+  type: ReimbursementTransactionType;
+  amount: number;
+  accountId: string;
+};
+
+export type ConvertReimbursementInput = {
+  pendingAmount: number;
+  accountId: string;
 };
 
 export function getQuickTransactionRules(
@@ -50,14 +64,41 @@ export function getQuickTransactionRules(
   };
 }
 
-function validateQuickTransactionInput(input: QuickTransactionInput): void {
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    throw new Error("El importe debe ser mayor que cero.");
+export function getReimbursementTransactionRules(
+  input: ReimbursementTransactionInput
+): QuickTransactionRules {
+  validateAmountAndAccount(input.amount, input.accountId);
+
+  if (input.type === "reimbursable_expense") {
+    return {
+      impact: getDefaultTransactionImpact("reimbursable_expense"),
+      balanceDeltas: [{ accountId: input.accountId, delta: -input.amount }]
+    };
   }
 
-  if (!input.accountId) {
-    throw new Error("Selecciona una cuenta.");
-  }
+  return {
+    impact: getDefaultTransactionImpact("reimbursement_income"),
+    balanceDeltas: [{ accountId: input.accountId, delta: input.amount }]
+  };
+}
+
+export function getConvertReimbursementToExpenseRules(
+  input: ConvertReimbursementInput
+): QuickTransactionRules {
+  validateAmountAndAccount(input.pendingAmount, input.accountId);
+
+  return {
+    impact: {
+      ...getDefaultTransactionImpact("expense"),
+      affectsRealBalance: false,
+      affectsNetWorth: false
+    },
+    balanceDeltas: []
+  };
+}
+
+function validateQuickTransactionInput(input: QuickTransactionInput): void {
+  validateAmountAndAccount(input.amount, input.accountId);
 
   if (input.type === "transfer") {
     if (!input.destinationAccountId) {
@@ -67,5 +108,15 @@ function validateQuickTransactionInput(input: QuickTransactionInput): void {
     if (input.destinationAccountId === input.accountId) {
       throw new Error("La cuenta de destino debe ser distinta.");
     }
+  }
+}
+
+function validateAmountAndAccount(amount: number, accountId: string): void {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("El importe debe ser mayor que cero.");
+  }
+
+  if (!accountId) {
+    throw new Error("Selecciona una cuenta.");
   }
 }

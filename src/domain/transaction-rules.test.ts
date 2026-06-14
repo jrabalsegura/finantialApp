@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getQuickTransactionRules } from "./transaction-rules";
+import {
+  getConvertReimbursementToExpenseRules,
+  getQuickTransactionRules,
+  getReimbursementTransactionRules
+} from "./transaction-rules";
 
 test("gasto normal reduce la cuenta y afecta a gasto, ahorro y patrimonio", () => {
   const rules = getQuickTransactionRules({
@@ -61,4 +65,47 @@ test("transferencia exige destino distinto", () => {
       }),
     /distinta/
   );
+});
+
+test("gasto reembolsable baja saldo sin contar como gasto ni ahorro", () => {
+  const rules = getReimbursementTransactionRules({
+    type: "reimbursable_expense",
+    amount: 120,
+    accountId: "openbank"
+  });
+
+  assert.deepEqual(rules.balanceDeltas, [
+    { accountId: "openbank", delta: -120 }
+  ]);
+  assert.equal(rules.impact.affectsPersonalExpense, false);
+  assert.equal(rules.impact.affectsMonthlySavings, false);
+  assert.equal(rules.impact.affectsNetWorth, false);
+});
+
+test("cobro de reembolso sube saldo sin contar como ingreso ni ahorro", () => {
+  const rules = getReimbursementTransactionRules({
+    type: "reimbursement_income",
+    amount: 50,
+    accountId: "openbank"
+  });
+
+  assert.deepEqual(rules.balanceDeltas, [
+    { accountId: "openbank", delta: 50 }
+  ]);
+  assert.equal(rules.impact.affectsPersonalIncome, false);
+  assert.equal(rules.impact.affectsMonthlySavings, false);
+  assert.equal(rules.impact.affectsNetWorth, false);
+});
+
+test("conversion a gasto real cuenta como gasto sin volver a tocar saldo bancario", () => {
+  const rules = getConvertReimbursementToExpenseRules({
+    pendingAmount: 80,
+    accountId: "openbank"
+  });
+
+  assert.deepEqual(rules.balanceDeltas, []);
+  assert.equal(rules.impact.affectsRealBalance, false);
+  assert.equal(rules.impact.affectsPersonalExpense, true);
+  assert.equal(rules.impact.affectsMonthlySavings, true);
+  assert.equal(rules.impact.affectsNetWorth, false);
 });

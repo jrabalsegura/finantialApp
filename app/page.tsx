@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createQuickTransaction } from "./actions";
 import { QuickTransactionForm } from "./components/QuickTransactionForm";
 import { prisma } from "@/lib/prisma";
@@ -78,13 +79,21 @@ export default async function Home() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
-        <header className="grid gap-2">
-          <p className="text-sm font-semibold uppercase tracking-wide text-accent">
-            Movimientos
-          </p>
-          <h1 className="text-3xl font-semibold text-ink sm:text-4xl">
-            Captura rápida
-          </h1>
+        <header className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="grid gap-2">
+            <p className="text-sm font-semibold uppercase tracking-wide text-accent">
+              Movimientos
+            </p>
+            <h1 className="text-3xl font-semibold text-ink sm:text-4xl">
+              Captura rápida
+            </h1>
+          </div>
+          <Link
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink"
+            href="/reimbursements"
+          >
+            Pendientes de cobrar
+          </Link>
         </header>
 
         {accounts.length > 0 ? (
@@ -111,8 +120,12 @@ export default async function Home() {
           {transactions.length > 0 ? (
             <ul className="divide-y divide-line">
               {transactions.map((transaction) => {
-                const isExpense = transaction.type === "expense";
-                const isIncome = transaction.type === "income";
+                const isOutflow =
+                  transaction.type === "expense" ||
+                  transaction.type === "reimbursable_expense";
+                const isInflow =
+                  transaction.type === "income" ||
+                  transaction.type === "reimbursement_income";
                 const amount = toMoneyNumber(transaction.amount);
 
                 return (
@@ -139,9 +152,9 @@ export default async function Home() {
 
                     <p
                       className={`text-lg font-semibold ${
-                        isExpense
+                        isOutflow
                           ? "text-rose-700"
-                          : isIncome
+                          : isInflow
                             ? "text-emerald-700"
                             : "text-ink"
                       }`}
@@ -191,11 +204,11 @@ function formatMovementAmount(
   type: keyof typeof transactionLabels,
   amount: number
 ): string {
-  if (type === "expense") {
+  if (type === "expense" || type === "reimbursable_expense") {
     return `-${currencyFormatter.format(amount)}`;
   }
 
-  if (type === "income") {
+  if (type === "income" || type === "reimbursement_income") {
     return `+${currencyFormatter.format(amount)}`;
   }
 
