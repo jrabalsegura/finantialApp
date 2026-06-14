@@ -4,7 +4,7 @@ Webapp personal de finanzas construida por fases con Next.js, TypeScript, Tailwi
 
 ## Fase actual
 
-Esta entrega cubre solo la Fase 1:
+La Fase 1 cubre:
 
 - Proyecto Next.js con App Router y TypeScript.
 - Tailwind CSS configurado.
@@ -12,6 +12,13 @@ Esta entrega cubre solo la Fase 1:
 - Modelo de datos principal en `prisma/schema.prisma`.
 - Migración inicial en `prisma/migrations`.
 - Seed inicial de cuentas, categorías y partidas de ahorro.
+
+La Fase 2 añade funciones de dominio reutilizables para:
+
+- Calcular dinero disponible y patrimonio total.
+- Calcular ingresos, gastos y ahorro mensual real.
+- Calcular pendientes de reembolso.
+- Distinguir movimientos que afectan a ahorro mensual o patrimonio.
 
 ## Requisitos
 
@@ -62,6 +69,7 @@ Esta entrega cubre solo la Fase 1:
 
 - `npm run dev`: arranca Next.js en desarrollo.
 - `npm run build`: compila la app.
+- `npm test`: ejecuta los tests de cálculos financieros.
 - `npm run typecheck`: comprueba TypeScript.
 - `npm run prisma:generate`: genera Prisma Client.
 - `npm run db:migrate`: aplica migraciones en desarrollo.
@@ -83,9 +91,8 @@ El seed crea estas cuentas:
 
 También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
 
-## Pendiente para Fase 2
+## Pendiente para Fase 3
 
-- Funciones de dominio para calculos financieros.
 - Layout de aplicacion y navegacion.
 - Dashboard inicial.
 - Pantalla movil de captura rapida.
