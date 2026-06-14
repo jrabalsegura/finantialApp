@@ -43,6 +43,14 @@ La Fase 5 añade gestión de cuentas y partidas de ahorro:
 - Asignación y retirada de dinero en partidas de ahorro.
 - Métricas de dinero disponible, dinero asignado y dinero no asignado.
 
+La Fase 6 añade el dashboard principal en `/`:
+
+- Métricas de dinero disponible, patrimonio total, ingresos, gastos y ahorro mensual.
+- Pendientes de cobrar, dinero asignado y dinero libre/no asignado.
+- Distribución por cuentas y por partidas de ahorro.
+- Separación explícita entre ahorro mensual y variación patrimonial.
+- En móvil se mantiene la captura rápida como primer bloque visible.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -114,9 +122,8 @@ El seed crea estas cuentas:
 
 También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
 
-## Pendiente para Fase 6
+## Pendiente para Fase 7
 
-- Layout de aplicación y navegación.
-- Dashboard inicial.
 - CRUD completo de categorías y movimientos.
-- Dashboard, cierre mensual e histórico.
+- Cierre mensual e histórico mensual.
+- Evolución completa respecto a meses anteriores cuando exista cierre mensual.
