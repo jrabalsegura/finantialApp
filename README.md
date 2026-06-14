@@ -20,6 +20,14 @@ La Fase 2 añade funciones de dominio reutilizables para:
 - Calcular pendientes de reembolso.
 - Distinguir movimientos que afectan a ahorro mensual o patrimonio.
 
+La Fase 3 añade registro básico de movimientos:
+
+- Formulario rápido mobile-first para gasto, ingreso y transferencia.
+- Openbank principal como cuenta por defecto cuando existe.
+- Selección de cuenta, categoría, fecha, descripción e importe.
+- Actualización de saldos de cuentas al registrar movimientos.
+- Listado básico de movimientos recientes.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -91,10 +99,9 @@ El seed crea estas cuentas:
 
 También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
 
-## Pendiente para Fase 3
+## Pendiente para Fase 4
 
 - Layout de aplicacion y navegacion.
 - Dashboard inicial.
-- Pantalla movil de captura rapida.
 - CRUD de cuentas, categorías y movimientos.
 - Flujos de reembolsos, ahorro, cierre mensual e histórico.
