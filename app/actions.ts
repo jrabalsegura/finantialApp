@@ -459,9 +459,20 @@ export async function deleteAccount(formData: FormData): Promise<void> {
     const relatedSnapshots = await tx.monthlyAccountSnapshot.count({
       where: { accountId: id }
     });
+    const relatedRecurringTransactions = await tx.recurringTransaction.count({
+      where: {
+        OR: [{ accountId: id }, { destinationAccountId: id }]
+      }
+    });
 
-    if (relatedTransactions > 0 || relatedSnapshots > 0) {
-      throw new Error("No se puede eliminar una cuenta con movimientos.");
+    if (
+      relatedTransactions > 0 ||
+      relatedSnapshots > 0 ||
+      relatedRecurringTransactions > 0
+    ) {
+      throw new Error(
+        "No se puede eliminar una cuenta con movimientos o plantillas recurrentes."
+      );
     }
 
     await tx.account.delete({ where: { id } });
@@ -544,9 +555,18 @@ export async function deleteSavingsBucket(formData: FormData): Promise<void> {
     const relatedSnapshots = await tx.monthlyBucketSnapshot.count({
       where: { savingsBucketId: id }
     });
+    const relatedRecurringTransactions = await tx.recurringTransaction.count({
+      where: { savingsBucketId: id }
+    });
 
-    if (relatedTransactions > 0 || relatedSnapshots > 0) {
-      throw new Error("No se puede eliminar una partida con movimientos.");
+    if (
+      relatedTransactions > 0 ||
+      relatedSnapshots > 0 ||
+      relatedRecurringTransactions > 0
+    ) {
+      throw new Error(
+        "No se puede eliminar una partida con movimientos o plantillas recurrentes."
+      );
     }
 
     await tx.savingsBucket.delete({ where: { id } });

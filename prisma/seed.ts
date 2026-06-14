@@ -141,6 +141,74 @@ async function main() {
       }
     });
   }
+
+  const [defaultAccount, savingsAccount, salaryCategory, subscriptionCategory, longTermBucket] =
+    await Promise.all([
+      prisma.account.findUnique({ where: { name: "Openbank principal" } }),
+      prisma.account.findUnique({ where: { name: "Openbank ahorro" } }),
+      prisma.category.findUnique({ where: { name: "Nómina" } }),
+      prisma.category.findUnique({ where: { name: "Suscripciones" } }),
+      prisma.savingsBucket.findUnique({ where: { name: "Largo plazo" } })
+    ]);
+
+  if (
+    defaultAccount &&
+    savingsAccount &&
+    salaryCategory &&
+    subscriptionCategory &&
+    longTermBucket
+  ) {
+    const recurringExamples = [
+      {
+        name: "Nómina mensual",
+        type: "income" as const,
+        amount: 2500,
+        accountId: defaultAccount.id,
+        categoryId: salaryCategory.id,
+        savingsBucketId: null,
+        destinationAccountId: null,
+        dayOfMonth: 1
+      },
+      {
+        name: "Suscripción mensual",
+        type: "expense" as const,
+        amount: 15,
+        accountId: defaultAccount.id,
+        categoryId: subscriptionCategory.id,
+        savingsBucketId: null,
+        destinationAccountId: null,
+        dayOfMonth: 5
+      },
+      {
+        name: "Aportación mensual a largo plazo",
+        type: "savings_allocation" as const,
+        amount: 300,
+        accountId: savingsAccount.id,
+        categoryId: null,
+        savingsBucketId: longTermBucket.id,
+        destinationAccountId: null,
+        dayOfMonth: 1
+      }
+    ];
+
+    for (const recurring of recurringExamples) {
+      const existing = await prisma.recurringTransaction.findFirst({
+        where: { name: recurring.name },
+        select: { id: true }
+      });
+
+      if (!existing) {
+        await prisma.recurringTransaction.create({
+          data: {
+            ...recurring,
+            startDate: new Date(2026, 0, 1, 12),
+            isActive: true,
+            autoCreateMode: "pending"
+          }
+        });
+      }
+    }
+  }
 }
 
 main()

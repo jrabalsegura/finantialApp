@@ -10,6 +10,7 @@ import {
 } from "@/domain/financial-calculations";
 import type { MoneyValue } from "@/domain/financial-calculations";
 import { prisma } from "@/lib/prisma";
+import { generateRecurringOccurrencesForMonth } from "@/lib/recurring-transactions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,12 +48,24 @@ export default async function MonthlyClosePage({
   const query = await searchParams;
   const selectedPeriod = parsePeriod(query.period);
   const monthRange = getMonthDateRange(selectedPeriod.year, selectedPeriod.month);
+  const today = new Date();
+
+  if (
+    selectedPeriod.year === today.getFullYear() &&
+    selectedPeriod.month === today.getMonth() + 1
+  ) {
+    await generateRecurringOccurrencesForMonth(
+      selectedPeriod.year,
+      selectedPeriod.month
+    );
+  }
 
   const [
     accounts,
     savingsBuckets,
     monthlyTransactions,
-    existingClose
+    existingClose,
+    pendingRecurringCount
   ] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -127,6 +140,13 @@ export default async function MonthlyClosePage({
           }
         }
       }
+    }),
+    prisma.recurringTransactionOccurrence.count({
+      where: {
+        year: selectedPeriod.year,
+        month: selectedPeriod.month,
+        status: "pending"
+      }
     })
   ]);
 
@@ -199,6 +219,22 @@ export default async function MonthlyClosePage({
             </button>
           </form>
         </section>
+
+        {pendingRecurringCount > 0 ? (
+          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-sm sm:p-5">
+            <h2 className="font-semibold">Movimientos fijos pendientes</h2>
+            <p className="mt-1 text-sm">
+              Tienes movimientos fijos pendientes de confirmar u omitir antes
+              de cerrar el mes.
+            </p>
+            <Link
+              className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-amber-400 bg-white px-4 text-sm font-bold"
+              href="/recurring"
+            >
+              Revisar {pendingRecurringCount} pendientes
+            </Link>
+          </section>
+        ) : null}
 
         {existingClose ? (
           <ExistingClose close={existingClose} />

@@ -80,12 +80,14 @@ a {
 }
 
 .primary-button {
+  min-height: 3rem;
   border: 1px solid #172026;
   background: #172026;
   color: #ffffff;
 }
 
 .danger-button {
+  min-height: 3rem;
   border: 1px solid #fecdd3;
   background: #fff1f2;
   color: #9f1239;

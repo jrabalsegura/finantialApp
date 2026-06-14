@@ -41,6 +41,7 @@ export default async function SavingsPage() {
         _count: {
           select: {
             transactions: true,
+            recurringTransactions: true,
             monthlySnapshots: true
           }
         }
@@ -101,6 +102,7 @@ export default async function SavingsPage() {
                   : null;
                 const hasRelations =
                   bucket._count.transactions > 0 ||
+                  bucket._count.recurringTransactions > 0 ||
                   bucket._count.monthlySnapshots > 0;
 
                 return (

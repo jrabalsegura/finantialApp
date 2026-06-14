@@ -33,6 +33,8 @@ export default async function AccountsPage() {
         select: {
           transactions: true,
           incomingTransfers: true,
+          recurringTransactions: true,
+          incomingRecurringTransfers: true,
           monthlySnapshots: true
         }
       }
@@ -72,6 +74,8 @@ export default async function AccountsPage() {
                 const hasRelations =
                   account._count.transactions > 0 ||
                   account._count.incomingTransfers > 0 ||
+                  account._count.recurringTransactions > 0 ||
+                  account._count.incomingRecurringTransfers > 0 ||
                   account._count.monthlySnapshots > 0;
 
                 return (

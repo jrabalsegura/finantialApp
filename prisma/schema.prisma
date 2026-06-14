@@ -44,55 +44,77 @@ enum ReimbursementStatus {
   uncollectible
 }
 
-model Account {
-  id                       String        @id @default(cuid())
-  name                     String        @unique
-  type                     AccountType
-  currentBalance           Decimal       @default(0)
-  includeInAvailableMoney  Boolean       @default(true)
-  includeInNetWorth        Boolean       @default(true)
-  includeInMonthlySavings  Boolean       @default(true)
-  isDefault                Boolean       @default(false)
-  notes                    String?
-  createdAt                DateTime      @default(now())
-  updatedAt                DateTime      @updatedAt
+enum RecurringTransactionType {
+  expense
+  income
+  transfer
+  savings_allocation
+}
 
-  transactions             Transaction[] @relation("TransactionAccount")
-  incomingTransfers        Transaction[] @relation("TransactionDestinationAccount")
-  monthlySnapshots         MonthlyAccountSnapshot[]
+enum RecurringAutoCreateMode {
+  pending
+  automatic
+}
+
+enum RecurringOccurrenceStatus {
+  pending
+  confirmed
+  skipped
+}
+
+model Account {
+  id                      String      @id @default(cuid())
+  name                    String      @unique
+  type                    AccountType
+  currentBalance          Decimal     @default(0)
+  includeInAvailableMoney Boolean     @default(true)
+  includeInNetWorth       Boolean     @default(true)
+  includeInMonthlySavings Boolean     @default(true)
+  isDefault               Boolean     @default(false)
+  notes                   String?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  transactions               Transaction[]            @relation("TransactionAccount")
+  incomingTransfers          Transaction[]            @relation("TransactionDestinationAccount")
+  recurringTransactions      RecurringTransaction[]   @relation("RecurringTransactionAccount")
+  incomingRecurringTransfers RecurringTransaction[]   @relation("RecurringTransactionDestinationAccount")
+  monthlySnapshots           MonthlyAccountSnapshot[]
 }
 
 model Category {
-  id           String        @id @default(cuid())
-  name         String        @unique
-  type         CategoryType
-  icon         String?
-  color        String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id        String       @id @default(cuid())
+  name      String       @unique
+  type      CategoryType
+  icon      String?
+  color     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  transactions Transaction[]
+  transactions          Transaction[]
+  recurringTransactions RecurringTransaction[]
 }
 
 model SavingsBucket {
-  id               String        @id @default(cuid())
-  name             String        @unique
-  currentAmount    Decimal       @default(0)
-  targetAmount     Decimal?
-  targetDate       DateTime?
-  priority         Int?
-  isLongTerm       Boolean       @default(false)
-  notes            String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id            String    @id @default(cuid())
+  name          String    @unique
+  currentAmount Decimal   @default(0)
+  targetAmount  Decimal?
+  targetDate    DateTime?
+  priority      Int?
+  isLongTerm    Boolean   @default(false)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  transactions     Transaction[]
-  monthlySnapshots MonthlyBucketSnapshot[]
+  transactions          Transaction[]
+  recurringTransactions RecurringTransaction[]
+  monthlySnapshots      MonthlyBucketSnapshot[]
 }
 
 model Transaction {
-  id                     String            @id @default(cuid())
-  date                   DateTime          @default(now())
+  id                     String          @id @default(cuid())
+  date                   DateTime        @default(now())
   amount                 Decimal
   type                   TransactionType
   description            String?
@@ -100,22 +122,70 @@ model Transaction {
   destinationAccountId   String?
   categoryId             String?
   savingsBucketId        String?
-  affectsRealBalance     Boolean           @default(true)
-  affectsPersonalExpense Boolean           @default(false)
-  affectsPersonalIncome  Boolean           @default(false)
-  affectsMonthlySavings  Boolean           @default(false)
-  affectsNetWorth        Boolean           @default(true)
+  affectsRealBalance     Boolean         @default(true)
+  affectsPersonalExpense Boolean         @default(false)
+  affectsPersonalIncome  Boolean         @default(false)
+  affectsMonthlySavings  Boolean         @default(false)
+  affectsNetWorth        Boolean         @default(true)
   reimbursementId        String?
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
-  account                Account           @relation("TransactionAccount", fields: [accountId], references: [id])
-  destinationAccount     Account?          @relation("TransactionDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
-  category               Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  savingsBucket          SavingsBucket?    @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
-  reimbursement          Reimbursement?    @relation("ReimbursementPayments", fields: [reimbursementId], references: [id], onDelete: SetNull)
-  originalReimbursement  Reimbursement?    @relation("OriginalReimbursementTransaction")
-  accountSnapshots       MonthlyAccountSnapshot[]
+  account               Account                         @relation("TransactionAccount", fields: [accountId], references: [id])
+  destinationAccount    Account?                        @relation("TransactionDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
+  category              Category?                       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  savingsBucket         SavingsBucket?                  @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
+  reimbursement         Reimbursement?                  @relation("ReimbursementPayments", fields: [reimbursementId], references: [id], onDelete: SetNull)
+  originalReimbursement Reimbursement?                  @relation("OriginalReimbursementTransaction")
+  recurringOccurrence   RecurringTransactionOccurrence?
+  accountSnapshots      MonthlyAccountSnapshot[]
+}
+
+model RecurringTransaction {
+  id                   String                   @id @default(cuid())
+  name                 String
+  type                 RecurringTransactionType
+  amount               Decimal
+  accountId            String
+  destinationAccountId String?
+  categoryId           String?
+  savingsBucketId      String?
+  description          String?
+  dayOfMonth           Int                      @default(1)
+  startDate            DateTime
+  endDate              DateTime?
+  isActive             Boolean                  @default(true)
+  autoCreateMode       RecurringAutoCreateMode  @default(pending)
+  lastGeneratedMonth   String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  account            Account                          @relation("RecurringTransactionAccount", fields: [accountId], references: [id])
+  destinationAccount Account?                         @relation("RecurringTransactionDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
+  category           Category?                        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  savingsBucket      SavingsBucket?                   @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
+  occurrences        RecurringTransactionOccurrence[]
+
+  @@index([isActive])
+}
+
+model RecurringTransactionOccurrence {
+  id                     String                    @id @default(cuid())
+  recurringTransactionId String
+  year                   Int
+  month                  Int
+  scheduledDate          DateTime
+  amount                 Decimal
+  status                 RecurringOccurrenceStatus @default(pending)
+  generatedTransactionId String?                   @unique
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  recurringTransaction RecurringTransaction @relation(fields: [recurringTransactionId], references: [id], onDelete: Cascade)
+  generatedTransaction Transaction?         @relation(fields: [generatedTransactionId], references: [id], onDelete: SetNull)
+
+  @@unique([recurringTransactionId, year, month])
+  @@index([year, month, status])
 }
 
 model Reimbursement {
@@ -131,33 +201,33 @@ model Reimbursement {
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
-  originalTransaction   Transaction         @relation("OriginalReimbursementTransaction", fields: [originalTransactionId], references: [id])
-  payments              Transaction[]       @relation("ReimbursementPayments")
+  originalTransaction Transaction   @relation("OriginalReimbursementTransaction", fields: [originalTransactionId], references: [id])
+  payments            Transaction[] @relation("ReimbursementPayments")
 }
 
 model MonthlyClose {
-  id                 String                   @id @default(cuid())
-  year               Int
-  month              Int
-  totalIncome        Decimal                  @default(0)
-  totalExpense       Decimal                  @default(0)
-  monthlySavings     Decimal                  @default(0)
-  availableMoney     Decimal                  @default(0)
-  netWorth           Decimal                  @default(0)
-  longTermAssets     Decimal                  @default(0)
-  notes              String?
-  closedAt           DateTime?
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
+  id             String    @id @default(cuid())
+  year           Int
+  month          Int
+  totalIncome    Decimal   @default(0)
+  totalExpense   Decimal   @default(0)
+  monthlySavings Decimal   @default(0)
+  availableMoney Decimal   @default(0)
+  netWorth       Decimal   @default(0)
+  longTermAssets Decimal   @default(0)
+  notes          String?
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  accountSnapshots   MonthlyAccountSnapshot[]
-  bucketSnapshots    MonthlyBucketSnapshot[]
+  accountSnapshots MonthlyAccountSnapshot[]
+  bucketSnapshots  MonthlyBucketSnapshot[]
 
   @@unique([year, month])
 }
 
 model MonthlyAccountSnapshot {
-  id                      String        @id @default(cuid())
+  id                      String  @id @default(cuid())
   monthlyCloseId          String
   accountId               String
   calculatedBalance       Decimal
@@ -165,21 +235,21 @@ model MonthlyAccountSnapshot {
   difference              Decimal
   adjustmentTransactionId String?
 
-  monthlyClose            MonthlyClose  @relation(fields: [monthlyCloseId], references: [id], onDelete: Cascade)
-  account                 Account       @relation(fields: [accountId], references: [id])
-  adjustmentTransaction   Transaction?  @relation(fields: [adjustmentTransactionId], references: [id], onDelete: SetNull)
+  monthlyClose          MonthlyClose @relation(fields: [monthlyCloseId], references: [id], onDelete: Cascade)
+  account               Account      @relation(fields: [accountId], references: [id])
+  adjustmentTransaction Transaction? @relation(fields: [adjustmentTransactionId], references: [id], onDelete: SetNull)
 
   @@unique([monthlyCloseId, accountId])
 }
 
 model MonthlyBucketSnapshot {
-  id              String        @id @default(cuid())
+  id              String  @id @default(cuid())
   monthlyCloseId  String
   savingsBucketId String
   amount          Decimal
 
-  monthlyClose    MonthlyClose  @relation(fields: [monthlyCloseId], references: [id], onDelete: Cascade)
-  savingsBucket   SavingsBucket @relation(fields: [savingsBucketId], references: [id])
+  monthlyClose  MonthlyClose  @relation(fields: [monthlyCloseId], references: [id], onDelete: Cascade)
+  savingsBucket SavingsBucket @relation(fields: [savingsBucketId], references: [id])
 
   @@unique([monthlyCloseId, savingsBucketId])
 }

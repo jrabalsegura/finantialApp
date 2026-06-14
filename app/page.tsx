@@ -16,6 +16,7 @@ import {
   toMoneyNumber
 } from "@/domain/financial-calculations";
 import type { MoneyValue } from "@/domain/financial-calculations";
+import { generateRecurringOccurrencesForMonth } from "@/lib/recurring-transactions";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,8 @@ export default async function Home() {
   const currentMonth = today.getMonth() + 1;
   const currentMonthRange = getMonthDateRange(currentYear, currentMonth);
 
+  await generateRecurringOccurrencesForMonth(currentYear, currentMonth);
+
   const [
     accounts,
     categories,
@@ -63,7 +66,8 @@ export default async function Home() {
     monthlyTransactions,
     reimbursements,
     savingsBuckets,
-    monthlyCloses
+    monthlyCloses,
+    recurringOccurrences
   ] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -158,6 +162,28 @@ export default async function Home() {
         month: true,
         netWorth: true
       }
+    }),
+    prisma.recurringTransactionOccurrence.findMany({
+      where: {
+        year: currentYear,
+        month: currentMonth
+      },
+      orderBy: [{ scheduledDate: "asc" }, { createdAt: "asc" }],
+      include: {
+        recurringTransaction: {
+          include: {
+            account: {
+              select: { name: true }
+            },
+            destinationAccount: {
+              select: { name: true }
+            },
+            savingsBucket: {
+              select: { name: true }
+            }
+          }
+        }
+      }
     })
   ]);
 
@@ -201,6 +227,13 @@ export default async function Home() {
     type: "income",
     year: currentYear
   });
+  const pendingRecurringOccurrences = recurringOccurrences.filter(
+    (occurrence) => occurrence.status === "pending"
+  );
+  const pendingRecurringAmount = pendingRecurringOccurrences.reduce(
+    (total, occurrence) => total + toMoneyNumber(occurrence.amount),
+    0
+  );
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -227,6 +260,9 @@ export default async function Home() {
             <Link className="nav-link" href="/reimbursements">
               Pendientes
             </Link>
+            <Link className="nav-link" href="/recurring">
+              Fijos
+            </Link>
             <Link className="nav-link" href="/monthly-close">
               Cierre
             </Link>
@@ -238,6 +274,58 @@ export default async function Home() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           <section className="order-2 grid gap-6 lg:order-1">
+            <section className="rounded-lg border border-line bg-white shadow-sm">
+              <div className="grid gap-3 border-b border-line px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
+                <div>
+                  <h2 className="text-lg font-semibold text-ink">
+                    Movimientos fijos del mes
+                  </h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {pendingRecurringOccurrences.length} pendientes por{" "}
+                    {currencyFormatter.format(pendingRecurringAmount)}
+                  </p>
+                </div>
+                <Link className="primary-button" href="/recurring">
+                  Revisar pendientes
+                </Link>
+              </div>
+              {pendingRecurringOccurrences.length > 0 ? (
+                <ul className="divide-y divide-line">
+                  {pendingRecurringOccurrences.slice(0, 3).map((occurrence) => (
+                    <li
+                      className="grid gap-1 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                      key={occurrence.id}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-ink">
+                          {occurrence.recurringTransaction.name}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {occurrence.recurringTransaction.account.name}
+                          {occurrence.recurringTransaction.destinationAccount
+                            ? ` → ${occurrence.recurringTransaction.destinationAccount.name}`
+                            : occurrence.recurringTransaction.savingsBucket
+                              ? ` → ${occurrence.recurringTransaction.savingsBucket.name}`
+                            : ""}
+                          {" · "}
+                          {dateFormatter.format(occurrence.scheduledDate)}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-ink">
+                        {currencyFormatter.format(
+                          toMoneyNumber(occurrence.amount)
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="px-4 py-4 text-sm text-muted sm:px-5">
+                  No tienes movimientos fijos pendientes este mes.
+                </div>
+              )}
+            </section>
+
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label="Dinero disponible"
