@@ -1,0 +1,93 @@
+# Finanzas personales
+
+Webapp personal de finanzas construida por fases con Next.js, TypeScript, Tailwind CSS, Prisma y SQLite.
+
+## Fase actual
+
+Esta entrega cubre solo la Fase 1:
+
+- Proyecto Next.js con App Router y TypeScript.
+- Tailwind CSS configurado.
+- Prisma configurado con SQLite.
+- Modelo de datos principal en `prisma/schema.prisma`.
+- Migración inicial en `prisma/migrations`.
+- Seed inicial de cuentas, categorías y partidas de ahorro.
+
+## Requisitos
+
+- Node.js 20 o superior.
+- npm o un gestor compatible.
+
+## Puesta en marcha
+
+1. Instala dependencias:
+
+   ```bash
+   npm install
+   ```
+
+2. Revisa la variable de entorno:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   El valor por defecto usa SQLite local:
+
+   ```bash
+   DATABASE_URL="file:./dev.db"
+   ```
+
+3. Aplica la migración y genera Prisma Client:
+
+   ```bash
+   npm run db:migrate
+   ```
+
+4. Carga los datos iniciales:
+
+   ```bash
+   npm run db:seed
+   ```
+
+5. Arranca la app:
+
+   ```bash
+   npm run dev
+   ```
+
+   Abre `http://localhost:3000`.
+
+## Scripts útiles
+
+- `npm run dev`: arranca Next.js en desarrollo.
+- `npm run build`: compila la app.
+- `npm run typecheck`: comprueba TypeScript.
+- `npm run prisma:generate`: genera Prisma Client.
+- `npm run db:migrate`: aplica migraciones en desarrollo.
+- `npm run db:seed`: ejecuta el seed inicial.
+- `npm run db:studio`: abre Prisma Studio.
+
+## Datos iniciales
+
+El seed crea estas cuentas:
+
+- Openbank principal
+- Openbank ahorro
+- Santander
+- Efectivo
+- Raisin
+- Tesoro
+- HeyTrade
+- Plan de pensiones
+
+También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
+
+## Pendiente para Fase 2
+
+- Funciones de dominio para calculos financieros.
+- Layout de aplicacion y navegacion.
+- Dashboard inicial.
+- Pantalla movil de captura rapida.
+- CRUD de cuentas, categorías y movimientos.
+- Flujos de reembolsos, ahorro, cierre mensual e histórico.

@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  checking
+  savings
+  cash
+  investment
+  pension
+  treasury
+  other
+}
+
+enum CategoryType {
+  expense
+  income
+  both
+}
+
+enum TransactionType {
+  expense
+  income
+  transfer
+  balance_adjustment
+  reimbursable_expense
+  reimbursement_income
+  investment_gain
+  investment_loss
+  savings_allocation
+  savings_withdrawal
+}
+
+enum ReimbursementStatus {
+  pending
+  partially_paid
+  paid
+  cancelled
+  uncollectible
+}
+
+model Account {
+  id                       String        @id @default(cuid())
+  name                     String        @unique
+  type                     AccountType
+  currentBalance           Decimal       @default(0)
+  includeInAvailableMoney  Boolean       @default(true)
+  includeInNetWorth        Boolean       @default(true)
+  includeInMonthlySavings  Boolean       @default(true)
+  isDefault                Boolean       @default(false)
+  notes                    String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  transactions             Transaction[] @relation("TransactionAccount")
+  incomingTransfers        Transaction[] @relation("TransactionDestinationAccount")
+  monthlySnapshots         MonthlyAccountSnapshot[]
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  type         CategoryType
+  icon         String?
+  color        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  transactions Transaction[]
+}
+
+model SavingsBucket {
+  id               String        @id @default(cuid())
+  name             String        @unique
+  currentAmount    Decimal       @default(0)
+  targetAmount     Decimal?
+  targetDate       DateTime?
+  priority         Int?
+  isLongTerm       Boolean       @default(false)
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  transactions     Transaction[]
+  monthlySnapshots MonthlyBucketSnapshot[]
+}
+
+model Transaction {
+  id                     String            @id @default(cuid())
+  date                   DateTime          @default(now())
+  amount                 Decimal
+  type                   TransactionType
+  description            String?
+  accountId              String
+  destinationAccountId   String?
+  categoryId             String?
+  savingsBucketId        String?
+  affectsRealBalance     Boolean           @default(true)
+  affectsPersonalExpense Boolean           @default(false)
+  affectsPersonalIncome  Boolean           @default(false)
+  affectsMonthlySavings  Boolean           @default(false)
+  affectsNetWorth        Boolean           @default(true)
+  reimbursementId        String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  account                Account           @relation("TransactionAccount", fields: [accountId], references: [id])
+  destinationAccount     Account?          @relation("TransactionDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
+  category               Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  savingsBucket          SavingsBucket?    @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
+  reimbursement          Reimbursement?    @relation("ReimbursementPayments", fields: [reimbursementId], references: [id], onDelete: SetNull)
+  originalReimbursement  Reimbursement?    @relation("OriginalReimbursementTransaction")
+  accountSnapshots       MonthlyAccountSnapshot[]
+}
+
+model Reimbursement {
+  id                    String              @id @default(cuid())
+  title                 String
+  personName            String
+  originalTransactionId String              @unique
+  expectedAmount        Decimal
+  paidAmount            Decimal             @default(0)
+  status                ReimbursementStatus @default(pending)
+  dueDate               DateTime?
+  notes                 String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  originalTransaction   Transaction         @relation("OriginalReimbursementTransaction", fields: [originalTransactionId], references: [id])
+  payments              Transaction[]       @relation("ReimbursementPayments")
+}
+
+model MonthlyClose {
+  id                 String                   @id @default(cuid())
+  year               Int
+  month              Int
+  totalIncome        Decimal                  @default(0)
+  totalExpense       Decimal                  @default(0)
+  monthlySavings     Decimal                  @default(0)
+  availableMoney     Decimal                  @default(0)
+  netWorth           Decimal                  @default(0)
+  longTermAssets     Decimal                  @default(0)
+  notes              String?
+  closedAt           DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  accountSnapshots   MonthlyAccountSnapshot[]
+  bucketSnapshots    MonthlyBucketSnapshot[]
+
+  @@unique([year, month])
+}
+
+model MonthlyAccountSnapshot {
+  id                      String        @id @default(cuid())
+  monthlyCloseId          String
+  accountId               String
+  calculatedBalance       Decimal
+  realBalance             Decimal
+  difference              Decimal
+  adjustmentTransactionId String?
+
+  monthlyClose            MonthlyClose  @relation(fields: [monthlyCloseId], references: [id], onDelete: Cascade)
+  account                 Account       @relation(fields: [accountId], references: [id])
+  adjustmentTransaction   Transaction?  @relation(fields: [adjustmentTransactionId], references: [id], onDelete: SetNull)
+
+  @@unique([monthlyCloseId, accountId])
+}
+
+model MonthlyBucketSnapshot {
+  id              String        @id @default(cuid())
+  monthlyCloseId  String
+  savingsBucketId String
+  amount          Decimal
+
+  monthlyClose    MonthlyClose  @relation(fields: [monthlyCloseId], references: [id], onDelete: Cascade)
+  savingsBucket   SavingsBucket @relation(fields: [savingsBucketId], references: [id])
+
+  @@unique([monthlyCloseId, savingsBucketId])
+}
