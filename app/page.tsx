@@ -6,6 +6,7 @@ import {
   calculateAssignedSavings,
   calculateAvailableMoney,
   calculateNetWorth,
+  calculateNetWorthVariation as calculateNetWorthDifference,
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
@@ -228,6 +229,9 @@ export default async function Home() {
             </Link>
             <Link className="nav-link" href="/monthly-close">
               Cierre
+            </Link>
+            <Link className="nav-link" href="/history">
+              Histórico
             </Link>
           </nav>
         </header>
@@ -484,6 +488,12 @@ function NetWorthVariationCard({
             Se calculará cuando existan al menos dos cierres mensuales. Es una
             métrica separada del ahorro mensual.
           </p>
+          <Link
+            className="mt-3 inline-flex text-sm font-semibold text-accent"
+            href="/monthly-close"
+          >
+            Ir al cierre mensual
+          </Link>
         </>
       )}
     </div>
@@ -730,9 +740,14 @@ function calculateNetWorthVariation(
   }
 
   const [latestClose, previousClose] = monthlyCloses;
-  const amount =
-    toMoneyNumber(latestClose.netWorth) -
-    toMoneyNumber(previousClose.netWorth);
+  const amount = calculateNetWorthDifference(
+    latestClose.netWorth,
+    previousClose.netWorth
+  );
+
+  if (amount === null) {
+    return null;
+  }
 
   return {
     amount,

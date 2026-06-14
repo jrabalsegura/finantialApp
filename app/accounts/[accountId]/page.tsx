@@ -81,6 +81,11 @@ export default async function AccountHistoryPage({
           name: true
         }
       },
+      accountSnapshots: {
+        select: {
+          difference: true
+        }
+      },
       savingsBucket: {
         select: {
           name: true
@@ -256,6 +261,13 @@ function formatSignedAmount(amount: number): string {
 function getSignedAccountAmount(
   transaction: {
     accountId: string;
+    accountSnapshots: Array<{
+      difference:
+        | { toNumber: () => number }
+        | { toString: () => string }
+        | number
+        | string;
+    }>;
     amount: { toNumber: () => number } | { toString: () => string } | number | string;
     destinationAccountId: string | null;
     type: keyof typeof transactionLabels;
@@ -266,6 +278,12 @@ function getSignedAccountAmount(
 
   if (transaction.type === "transfer") {
     return transaction.destinationAccountId === accountId ? amount : -amount;
+  }
+
+  if (transaction.type === "balance_adjustment") {
+    return transaction.accountSnapshots[0]
+      ? toMoneyNumber(transaction.accountSnapshots[0].difference)
+      : 0;
   }
 
   if (

@@ -171,6 +171,9 @@ export default async function MonthlyClosePage({
             <Link className="nav-link" href="/savings">
               Partidas
             </Link>
+            <Link className="nav-link" href="/history">
+              Histórico
+            </Link>
           </nav>
         </header>
 
@@ -298,7 +301,7 @@ function ExistingClose({
           </ul>
         ) : (
           <div className="px-4 py-8 text-sm text-muted sm:px-5">
-            No hay snapshots de partidas.
+            Este cierre no tiene partidas de ahorro guardadas.
           </div>
         )}
       </section>

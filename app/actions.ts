@@ -755,6 +755,8 @@ export async function closeMonth(
         validateAdjustmentDirection(account.adjustmentKind, account.difference);
 
         const impact = getMonthlyCloseAdjustmentImpact(account.adjustmentKind);
+        // El importe se guarda en positivo; el signo real permanece en el
+        // snapshot y los flags determinan su impacto en informes y ahorro.
         const adjustmentTransaction = await tx.transaction.create({
           data: {
             date: closeDate,
@@ -863,6 +865,8 @@ export async function closeMonth(
 
         const impact = getDefaultTransactionImpact("savings_allocation");
 
+        // Repartir ahorro solo lo etiqueta mentalmente en una partida:
+        // no mueve dinero bancario ni altera de nuevo el ahorro del mes.
         await tx.savingsBucket.update({
           where: { id: allocation.bucketId },
           data: {
@@ -1306,6 +1310,7 @@ function revalidateSavingsViews(): void {
 function revalidateMonthlyCloseViews(): void {
   revalidatePath("/");
   revalidatePath("/accounts");
+  revalidatePath("/history");
   revalidatePath("/monthly-close");
   revalidatePath("/savings");
 }

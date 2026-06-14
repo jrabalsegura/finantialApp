@@ -51,6 +51,21 @@ La Fase 6 añade el dashboard principal en `/`:
 - Separación explícita entre ahorro mensual y variación patrimonial.
 - En móvil se mantiene la captura rápida como primer bloque visible.
 
+La Fase 7 añade el cierre mensual:
+
+- Asistente para revisar saldos calculados y registrar saldos reales.
+- Ajustes como gasto, ingreso, ajuste técnico o ahorro no asignado.
+- Cálculo definitivo de ingresos, gastos y ahorro mensual.
+- Reparto del ahorro y snapshots de cuentas y partidas.
+
+La Fase 8 completa el histórico y la revisión general:
+
+- Tabla mensual de ingresos, gastos, ahorro, disponible y patrimonio.
+- Variación patrimonial calculada entre cierres consecutivos.
+- Detalle de cada cierre con saldos, diferencias, ajustes y partidas.
+- Vistas adaptadas a escritorio y móvil, con estados vacíos útiles.
+- Tests y comentarios para las reglas financieras delicadas.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -96,6 +111,15 @@ La Fase 6 añade el dashboard principal en `/`:
 
    Abre `http://localhost:3000`.
 
+## Rutas principales
+
+- `/`: dashboard y captura rápida.
+- `/accounts`: gestión de cuentas.
+- `/savings`: gestión de partidas de ahorro.
+- `/reimbursements`: pendientes de cobrar.
+- `/monthly-close`: asistente de cierre mensual.
+- `/history`: histórico mensual y acceso al detalle de cada cierre.
+
 ## Scripts útiles
 
 - `npm run dev`: arranca Next.js en desarrollo.
@@ -122,8 +146,8 @@ El seed crea estas cuentas:
 
 También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
 
-## Pendiente para Fase 7
+## Estado actual
 
-- CRUD completo de categorías y movimientos.
-- Cierre mensual e histórico mensual.
-- Evolución completa respecto a meses anteriores cuando exista cierre mensual.
+Las fases 1 a 8 del alcance definido en `docs/SPEC.md` están implementadas.
+Quedan fuera de este alcance el CRUD visual completo de categorías y la edición
+o eliminación de movimientos ya registrados.

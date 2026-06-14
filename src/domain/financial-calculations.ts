@@ -263,8 +263,23 @@ export function calculateNetWorth(
       .map((account) => account.currentBalance)
   );
 
+  // Un reembolso pendiente sigue siendo un derecho de cobro: no es dinero
+  // disponible, pero sí forma parte del patrimonio mientras sea cobrable.
   return (
     accountNetWorth + calculatePendingReimbursements(reimbursements).totalPending
+  );
+}
+
+export function calculateNetWorthVariation(
+  currentNetWorth: MoneyValue,
+  previousNetWorth: MoneyValue | null | undefined
+): number | null {
+  if (previousNetWorth == null) {
+    return null;
+  }
+
+  return roundMoney(
+    toMoneyNumber(currentNetWorth) - toMoneyNumber(previousNetWorth)
   );
 }
 
@@ -303,6 +318,8 @@ export function calculateRealMonthlySavings(
     isTransactionInMonth(transaction, year, month)
   );
 
+  // El ahorro mensual mide ingresos personales menos gastos personales.
+  // Transferencias, reembolsos y revalorizaciones quedan fuera aunque cambien saldos.
   const income = sumMoney(
     monthlyTransactions
       .filter(
@@ -373,4 +390,8 @@ function sumMoney(values: MoneyValue[]): number {
     (total, value) => total + toMoneyNumber(value),
     0
   );
+}
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }

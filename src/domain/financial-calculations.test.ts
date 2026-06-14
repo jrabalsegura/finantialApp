@@ -4,6 +4,7 @@ import {
   calculateAvailableMoney,
   calculateAssignedSavings,
   calculateNetWorth,
+  calculateNetWorthVariation,
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
@@ -95,6 +96,11 @@ test("calcula dinero disponible usando solo cuentas marcadas como disponibles", 
 
 test("calcula patrimonio total con cuentas patrimoniales y pendientes de cobrar vivos", () => {
   assert.equal(calculateNetWorth(accounts, reimbursements), 11610.5);
+});
+
+test("calcula la variacion patrimonial entre cierres", () => {
+  assert.equal(calculateNetWorthVariation("1200.25", 1000), 200.25);
+  assert.equal(calculateNetWorthVariation(1200, null), null);
 });
 
 test("calcula dinero asignado y dinero disponible no asignado", () => {
