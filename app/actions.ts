@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import type { AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  calculateAvailableMoney,
+  calculateNetWorth,
+  calculateRealMonthlyExpense,
+  calculateRealMonthlyIncome,
+  calculateRealMonthlySavings,
   getDefaultTransactionImpact,
+  getMonthDateRange,
   toMoneyNumber
 } from "@/domain/financial-calculations";
 import {
@@ -19,10 +25,31 @@ export type TransactionFormState = {
   message: string;
 };
 
+export type MonthlyCloseFormState = TransactionFormState;
+
+type MonthlyCloseAdjustmentKind =
+  | "expense"
+  | "income"
+  | "technical"
+  | "unassigned_savings";
+
+type MonthlyCloseAdjustmentImpact = {
+  affectsPersonalExpense: boolean;
+  affectsPersonalIncome: boolean;
+  affectsMonthlySavings: boolean;
+  affectsNetWorth: boolean;
+};
+
 const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>([
   "expense",
   "income",
   "transfer"
+]);
+const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS = new Set<MonthlyCloseAdjustmentKind>([
+  "expense",
+  "income",
+  "technical",
+  "unassigned_savings"
 ]);
 const VALID_ACCOUNT_TYPES = new Set<AccountType>([
   "checking",
@@ -626,6 +653,458 @@ export async function withdrawFromSavingsBucket(
   revalidateSavingsViews();
 }
 
+export async function closeMonth(
+  _previousState: MonthlyCloseFormState,
+  formData: FormData
+): Promise<MonthlyCloseFormState> {
+  try {
+    const year = parseCloseYear(formData.get("year"));
+    const month = parseCloseMonth(formData.get("month"));
+    const notes = parseOptionalString(formData.get("notes"));
+    const monthRange = getMonthDateRange(year, month);
+    const closeDate = new Date(year, month, 0, 12);
+
+    await prisma.$transaction(async (tx) => {
+      const existingClose = await tx.monthlyClose.findUnique({
+        where: {
+          year_month: {
+            year,
+            month
+          }
+        },
+        select: { id: true }
+      });
+
+      if (existingClose) {
+        throw new Error("Ya existe un cierre guardado para ese mes.");
+      }
+
+      const [accounts, savingsBuckets] = await Promise.all([
+        tx.account.findMany({
+          orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            currentBalance: true,
+            includeInAvailableMoney: true,
+            includeInNetWorth: true,
+            type: true
+          }
+        }),
+        tx.savingsBucket.findMany({
+          orderBy: [{ priority: "asc" }, { name: "asc" }],
+          select: {
+            id: true,
+            currentAmount: true,
+            isLongTerm: true
+          }
+        })
+      ]);
+
+      if (accounts.length === 0) {
+        throw new Error("No hay cuentas para cerrar el mes.");
+      }
+
+      const defaultAccount = await tx.account.findFirst({
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        select: { id: true }
+      });
+
+      if (!defaultAccount) {
+        throw new Error("No hay cuenta disponible para registrar el reparto.");
+      }
+
+      const accountSnapshots: Array<{
+        accountId: string;
+        adjustmentTransactionId?: string;
+        calculatedBalance: number;
+        difference: number;
+        realBalance: number;
+      }> = [];
+      const closedAccounts = accounts.map((account) => {
+        const calculatedBalance = toMoneyNumber(account.currentBalance);
+        const realBalance = parseAmountAllowingZero(
+          formData.get(`realBalance_${account.id}`)
+        );
+        const difference = roundMoney(realBalance - calculatedBalance);
+        const adjustmentKind = parseMonthlyCloseAdjustmentKind(
+          formData.get(`adjustmentKind_${account.id}`)
+        );
+
+        accountSnapshots.push({
+          accountId: account.id,
+          calculatedBalance,
+          difference,
+          realBalance
+        });
+
+        return {
+          ...account,
+          currentBalance: realBalance,
+          difference,
+          realBalance,
+          adjustmentKind
+        };
+      });
+
+      for (const account of closedAccounts) {
+        if (account.difference === 0) {
+          continue;
+        }
+
+        validateAdjustmentDirection(account.adjustmentKind, account.difference);
+
+        const impact = getMonthlyCloseAdjustmentImpact(account.adjustmentKind);
+        const adjustmentTransaction = await tx.transaction.create({
+          data: {
+            date: closeDate,
+            amount: Math.abs(account.difference),
+            type: "balance_adjustment",
+            description: `Ajuste cierre ${String(month).padStart(2, "0")}/${year}: ${getAdjustmentKindLabel(
+              account.adjustmentKind
+            )}`,
+            accountId: account.id,
+            affectsRealBalance: true,
+            affectsPersonalExpense: impact.affectsPersonalExpense,
+            affectsPersonalIncome: impact.affectsPersonalIncome,
+            affectsMonthlySavings: impact.affectsMonthlySavings,
+            affectsNetWorth: impact.affectsNetWorth
+          }
+        });
+
+        await tx.account.update({
+          where: { id: account.id },
+          data: {
+            currentBalance: {
+              increment: account.difference
+            }
+          }
+        });
+
+        const snapshot = accountSnapshots.find(
+          (item) => item.accountId === account.id
+        );
+
+        if (snapshot) {
+          snapshot.adjustmentTransactionId = adjustmentTransaction.id;
+        }
+      }
+
+      const transactionsAfterAdjustments = await tx.transaction.findMany({
+        where: {
+          date: {
+            gte: monthRange.start,
+            lt: monthRange.end
+          }
+        },
+        select: {
+          date: true,
+          amount: true,
+          type: true,
+          affectsPersonalExpense: true,
+          affectsPersonalIncome: true,
+          affectsMonthlySavings: true,
+          affectsNetWorth: true
+        }
+      });
+
+      const totalIncome = calculateRealMonthlyIncome(
+        transactionsAfterAdjustments,
+        year,
+        month
+      );
+      const totalExpense = calculateRealMonthlyExpense(
+        transactionsAfterAdjustments,
+        year,
+        month
+      );
+      const monthlySavings = calculateRealMonthlySavings(
+        transactionsAfterAdjustments,
+        year,
+        month
+      );
+      const savingsAllocations = savingsBuckets.map((bucket) => ({
+        bucketId: bucket.id,
+        amount: parseAmountAllowingZero(
+          formData.get(`savingsAllocation_${bucket.id}`)
+        )
+      }));
+      const negativeAllocation = savingsAllocations.find(
+        (allocation) => allocation.amount < 0
+      );
+
+      if (negativeAllocation) {
+        throw new Error("El reparto de ahorro no puede contener importes negativos.");
+      }
+
+      const totalAllocated = roundMoney(
+        savingsAllocations.reduce(
+          (total, allocation) => total + allocation.amount,
+          0
+        )
+      );
+
+      if (totalAllocated < 0) {
+        throw new Error("El reparto de ahorro no puede ser negativo.");
+      }
+
+      if (monthlySavings <= 0 && totalAllocated > 0) {
+        throw new Error("No se puede repartir ahorro si el ahorro mensual no es positivo.");
+      }
+
+      if (monthlySavings > 0 && totalAllocated > roundMoney(monthlySavings)) {
+        throw new Error("El reparto no puede superar el ahorro mensual real.");
+      }
+
+      for (const allocation of savingsAllocations) {
+        if (allocation.amount <= 0) {
+          continue;
+        }
+
+        const impact = getDefaultTransactionImpact("savings_allocation");
+
+        await tx.savingsBucket.update({
+          where: { id: allocation.bucketId },
+          data: {
+            currentAmount: {
+              increment: allocation.amount
+            }
+          }
+        });
+
+        await tx.transaction.create({
+          data: {
+            date: closeDate,
+            amount: allocation.amount,
+            type: "savings_allocation",
+            description: `Reparto cierre ${String(month).padStart(2, "0")}/${year}`,
+            accountId: defaultAccount.id,
+            savingsBucketId: allocation.bucketId,
+            affectsRealBalance: impact.affectsRealBalance,
+            affectsPersonalExpense: impact.affectsPersonalExpense,
+            affectsPersonalIncome: impact.affectsPersonalIncome,
+            affectsMonthlySavings: impact.affectsMonthlySavings,
+            affectsNetWorth: impact.affectsNetWorth
+          }
+        });
+      }
+
+      const [finalSavingsBuckets, reimbursements] = await Promise.all([
+        tx.savingsBucket.findMany({
+          orderBy: [{ priority: "asc" }, { name: "asc" }],
+          select: {
+            id: true,
+            currentAmount: true
+          }
+        }),
+        tx.reimbursement.findMany({
+          select: {
+            id: true,
+            title: true,
+            personName: true,
+            expectedAmount: true,
+            paidAmount: true,
+            status: true,
+            dueDate: true
+          }
+        })
+      ]);
+      const finalAccounts = closedAccounts.map((account) => ({
+        currentBalance: account.realBalance,
+        includeInAvailableMoney: account.includeInAvailableMoney,
+        includeInNetWorth: account.includeInNetWorth,
+        type: account.type
+      }));
+      const availableMoney = calculateAvailableMoney(finalAccounts);
+      const netWorth = calculateNetWorth(finalAccounts, reimbursements);
+      const longTermAssets = finalAccounts
+        .filter((account) =>
+          ["investment", "pension", "treasury"].includes(account.type)
+        )
+        .reduce(
+          (total, account) => total + toMoneyNumber(account.currentBalance),
+          0
+        );
+
+      const monthlyClose = await tx.monthlyClose.create({
+        data: {
+          year,
+          month,
+          totalIncome,
+          totalExpense,
+          monthlySavings,
+          availableMoney,
+          netWorth,
+          longTermAssets,
+          notes,
+          closedAt: new Date()
+        }
+      });
+
+      for (const snapshot of accountSnapshots) {
+        await tx.monthlyAccountSnapshot.create({
+          data: {
+            monthlyCloseId: monthlyClose.id,
+            accountId: snapshot.accountId,
+            calculatedBalance: snapshot.calculatedBalance,
+            realBalance: snapshot.realBalance,
+            difference: snapshot.difference,
+            adjustmentTransactionId: snapshot.adjustmentTransactionId
+          }
+        });
+      }
+
+      for (const bucket of finalSavingsBuckets) {
+        await tx.monthlyBucketSnapshot.create({
+          data: {
+            monthlyCloseId: monthlyClose.id,
+            savingsBucketId: bucket.id,
+            amount: bucket.currentAmount
+          }
+        });
+      }
+    });
+
+    revalidateMonthlyCloseViews();
+
+    return {
+      status: "success",
+      message: "Cierre mensual guardado."
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el cierre mensual."
+    };
+  }
+}
+
+function parseCloseMonth(value: FormDataEntryValue | null): number {
+  const parsedValue = parseIntegerField(value, "Mes no válido.");
+
+  if (parsedValue < 1 || parsedValue > 12) {
+    throw new Error("Mes no válido.");
+  }
+
+  return parsedValue;
+}
+
+function parseCloseYear(value: FormDataEntryValue | null): number {
+  const parsedValue = parseIntegerField(value, "Año no válido.");
+
+  if (parsedValue < 2000 || parsedValue > 2100) {
+    throw new Error("Año no válido.");
+  }
+
+  return parsedValue;
+}
+
+function parseIntegerField(
+  value: FormDataEntryValue | null,
+  errorMessage: string
+): number {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(errorMessage);
+  }
+
+  const parsedValue = Number(value);
+
+  if (!Number.isInteger(parsedValue)) {
+    throw new Error(errorMessage);
+  }
+
+  return parsedValue;
+}
+
+function parseMonthlyCloseAdjustmentKind(
+  value: FormDataEntryValue | null
+): MonthlyCloseAdjustmentKind {
+  if (
+    typeof value !== "string" ||
+    !VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS.has(
+      value as MonthlyCloseAdjustmentKind
+    )
+  ) {
+    throw new Error("Tipo de ajuste de cierre no válido.");
+  }
+
+  return value as MonthlyCloseAdjustmentKind;
+}
+
+function getMonthlyCloseAdjustmentImpact(
+  kind: MonthlyCloseAdjustmentKind
+): MonthlyCloseAdjustmentImpact {
+  if (kind === "expense") {
+    return {
+      affectsPersonalExpense: true,
+      affectsPersonalIncome: false,
+      affectsMonthlySavings: true,
+      affectsNetWorth: true
+    };
+  }
+
+  if (kind === "income") {
+    return {
+      affectsPersonalExpense: false,
+      affectsPersonalIncome: true,
+      affectsMonthlySavings: true,
+      affectsNetWorth: true
+    };
+  }
+
+  if (kind === "unassigned_savings") {
+    return {
+      affectsPersonalExpense: false,
+      affectsPersonalIncome: false,
+      affectsMonthlySavings: false,
+      affectsNetWorth: true
+    };
+  }
+
+  return {
+    affectsPersonalExpense: false,
+    affectsPersonalIncome: false,
+    affectsMonthlySavings: false,
+    affectsNetWorth: false
+  };
+}
+
+function getAdjustmentKindLabel(kind: MonthlyCloseAdjustmentKind): string {
+  if (kind === "expense") {
+    return "gasto real";
+  }
+
+  if (kind === "income") {
+    return "ingreso real";
+  }
+
+  if (kind === "unassigned_savings") {
+    return "ajuste de ahorro no asignado";
+  }
+
+  return "ajuste técnico";
+}
+
+function validateAdjustmentDirection(
+  kind: MonthlyCloseAdjustmentKind,
+  difference: number
+): void {
+  if (kind === "expense" && difference > 0) {
+    throw new Error("Un ajuste de gasto real debe reducir el saldo de la cuenta.");
+  }
+
+  if (kind === "income" && difference < 0) {
+    throw new Error("Un ajuste de ingreso real debe aumentar el saldo de la cuenta.");
+  }
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function parseTransactionType(value: FormDataEntryValue | null): QuickTransactionType {
   if (
     typeof value !== "string" ||
@@ -821,5 +1300,12 @@ function revalidateAccountViews(): void {
 
 function revalidateSavingsViews(): void {
   revalidatePath("/");
+  revalidatePath("/savings");
+}
+
+function revalidateMonthlyCloseViews(): void {
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  revalidatePath("/monthly-close");
   revalidatePath("/savings");
 }

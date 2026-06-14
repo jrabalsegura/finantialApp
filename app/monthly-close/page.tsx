@@ -1,0 +1,352 @@
+import Link from "next/link";
+import { closeMonth } from "../actions";
+import { MonthlyCloseForm } from "../components/MonthlyCloseForm";
+import {
+  calculateRealMonthlyExpense,
+  calculateRealMonthlyIncome,
+  calculateRealMonthlySavings,
+  getMonthDateRange,
+  toMoneyNumber
+} from "@/domain/financial-calculations";
+import type { MoneyValue } from "@/domain/financial-calculations";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+const currencyFormatter = new Intl.NumberFormat("es-ES", {
+  style: "currency",
+  currency: "EUR"
+});
+
+const monthFormatter = new Intl.DateTimeFormat("es-ES", {
+  month: "long",
+  year: "numeric"
+});
+
+type ExistingMonthlyClose = {
+  accountSnapshots: Array<{
+    account: { name: string };
+    calculatedBalance: MoneyValue;
+    difference: MoneyValue;
+    realBalance: MoneyValue;
+  }>;
+  bucketSnapshots: Array<{
+    amount: MoneyValue;
+    savingsBucket: { name: string };
+  }>;
+  monthlySavings: MoneyValue;
+  totalExpense: MoneyValue;
+  totalIncome: MoneyValue;
+};
+
+export default async function MonthlyClosePage({
+  searchParams
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  const query = await searchParams;
+  const selectedPeriod = parsePeriod(query.period);
+  const monthRange = getMonthDateRange(selectedPeriod.year, selectedPeriod.month);
+
+  const [
+    accounts,
+    savingsBuckets,
+    monthlyTransactions,
+    existingClose
+  ] = await Promise.all([
+    prisma.account.findMany({
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        currentBalance: true,
+        includeInAvailableMoney: true,
+        includeInNetWorth: true
+      }
+    }),
+    prisma.savingsBucket.findMany({
+      orderBy: [{ priority: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        currentAmount: true,
+        isLongTerm: true
+      }
+    }),
+    prisma.transaction.findMany({
+      where: {
+        date: {
+          gte: monthRange.start,
+          lt: monthRange.end
+        }
+      },
+      select: {
+        date: true,
+        amount: true,
+        type: true,
+        affectsPersonalExpense: true,
+        affectsPersonalIncome: true,
+        affectsMonthlySavings: true,
+        affectsNetWorth: true
+      }
+    }),
+    prisma.monthlyClose.findUnique({
+      where: {
+        year_month: {
+          year: selectedPeriod.year,
+          month: selectedPeriod.month
+        }
+      },
+      include: {
+        accountSnapshots: {
+          orderBy: {
+            account: {
+              name: "asc"
+            }
+          },
+          include: {
+            account: {
+              select: {
+                name: true
+              }
+            }
+          }
+        },
+        bucketSnapshots: {
+          orderBy: {
+            savingsBucket: {
+              name: "asc"
+            }
+          },
+          include: {
+            savingsBucket: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
+      }
+    })
+  ]);
+
+  const totalIncome = calculateRealMonthlyIncome(
+    monthlyTransactions,
+    selectedPeriod.year,
+    selectedPeriod.month
+  );
+  const totalExpense = calculateRealMonthlyExpense(
+    monthlyTransactions,
+    selectedPeriod.year,
+    selectedPeriod.month
+  );
+  const monthlySavings = calculateRealMonthlySavings(
+    monthlyTransactions,
+    selectedPeriod.year,
+    selectedPeriod.month
+  );
+  const monthLabel = capitalize(
+    monthFormatter.format(
+      new Date(selectedPeriod.year, selectedPeriod.month - 1, 1)
+    )
+  );
+
+  return (
+    <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
+      <div className="mx-auto grid w-full max-w-6xl gap-6">
+        <header className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="grid gap-2">
+            <p className="text-sm font-semibold uppercase tracking-wide text-accent">
+              Cierre mensual
+            </p>
+            <h1 className="text-3xl font-semibold text-ink sm:text-4xl">
+              Asistente de cierre
+            </h1>
+            <p className="text-sm text-muted">{monthLabel}</p>
+          </div>
+          <nav className="flex flex-wrap gap-2">
+            <Link className="nav-link" href="/">
+              Dashboard
+            </Link>
+            <Link className="nav-link" href="/savings">
+              Partidas
+            </Link>
+          </nav>
+        </header>
+
+        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+            Paso 1
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-ink">
+            Seleccionar mes
+          </h2>
+          <form className="mt-4 grid gap-3 sm:grid-cols-[220px_auto]" method="GET">
+            <label className="field-label">
+              Mes
+              <input
+                className="field-input"
+                defaultValue={formatPeriodValue(selectedPeriod)}
+                name="period"
+                type="month"
+              />
+            </label>
+            <button className="primary-button self-end" type="submit">
+              Revisar mes
+            </button>
+          </form>
+        </section>
+
+        {existingClose ? (
+          <ExistingClose close={existingClose} />
+        ) : (
+          <MonthlyCloseForm
+            accounts={accounts.map((account) => ({
+              calculatedBalance: toMoneyNumber(account.currentBalance),
+              id: account.id,
+              includeInAvailableMoney: account.includeInAvailableMoney,
+              includeInNetWorth: account.includeInNetWorth,
+              name: account.name
+            }))}
+            action={closeMonth}
+            baseMonthlySavings={monthlySavings}
+            buckets={savingsBuckets.map((bucket) => ({
+              currentAmount: toMoneyNumber(bucket.currentAmount),
+              id: bucket.id,
+              isLongTerm: bucket.isLongTerm,
+              name: bucket.name
+            }))}
+            month={selectedPeriod.month}
+            totalExpense={totalExpense}
+            totalIncome={totalIncome}
+            year={selectedPeriod.year}
+          />
+        )}
+      </div>
+    </main>
+  );
+}
+
+function ExistingClose({
+  close
+}: {
+  close: ExistingMonthlyClose;
+}) {
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Ingresos" value={toMoneyNumber(close.totalIncome)} />
+        <Metric label="Gastos" value={toMoneyNumber(close.totalExpense)} />
+        <Metric label="Ahorro mensual" value={toMoneyNumber(close.monthlySavings)} />
+      </section>
+      <section className="rounded-lg border border-line bg-white shadow-sm">
+        <div className="border-b border-line px-4 py-3 sm:px-5">
+          <h2 className="text-lg font-semibold text-ink">Cierre guardado</h2>
+          <p className="mt-1 text-sm text-muted">
+            Este mes ya tiene snapshots mensuales.
+          </p>
+        </div>
+        <ul className="divide-y divide-line">
+          {close.accountSnapshots.map((snapshot) => (
+            <li
+              className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:px-5"
+              key={snapshot.account.name}
+            >
+              <p className="text-sm font-semibold text-ink">
+                {snapshot.account.name}
+              </p>
+              <p className="text-sm text-muted">
+                Calculado:{" "}
+                {currencyFormatter.format(
+                  toMoneyNumber(snapshot.calculatedBalance)
+                )}
+              </p>
+              <p className="text-sm text-muted">
+                Real:{" "}
+                {currencyFormatter.format(toMoneyNumber(snapshot.realBalance))}
+              </p>
+              <p className="text-sm font-semibold text-ink">
+                Dif.:{" "}
+                {currencyFormatter.format(toMoneyNumber(snapshot.difference))}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-lg border border-line bg-white shadow-sm">
+        <div className="border-b border-line px-4 py-3 sm:px-5">
+          <h2 className="text-lg font-semibold text-ink">
+            Snapshots de partidas
+          </h2>
+        </div>
+        {close.bucketSnapshots.length > 0 ? (
+          <ul className="divide-y divide-line">
+            {close.bucketSnapshots.map((snapshot) => (
+              <li
+                className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                key={snapshot.savingsBucket.name}
+              >
+                <p className="text-sm font-semibold text-ink">
+                  {snapshot.savingsBucket.name}
+                </p>
+                <p className="text-sm font-semibold text-ink">
+                  {currencyFormatter.format(toMoneyNumber(snapshot.amount))}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="px-4 py-8 text-sm text-muted sm:px-5">
+            No hay snapshots de partidas.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+      <p className="text-sm font-medium text-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-ink">
+        {currencyFormatter.format(value)}
+      </p>
+    </div>
+  );
+}
+
+function parsePeriod(value: string | undefined): { month: number; year: number } {
+  if (value) {
+    const [yearValue, monthValue] = value.split("-");
+    const year = Number(yearValue);
+    const month = Number(monthValue);
+
+    if (
+      Number.isInteger(year) &&
+      Number.isInteger(month) &&
+      year >= 2000 &&
+      year <= 2100 &&
+      month >= 1 &&
+      month <= 12
+    ) {
+      return { year, month };
+    }
+  }
+
+  const today = new Date();
+
+  return {
+    year: today.getFullYear(),
+    month: today.getMonth() + 1
+  };
+}
+
+function formatPeriodValue(period: { month: number; year: number }): string {
+  return `${period.year}-${String(period.month).padStart(2, "0")}`;
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}

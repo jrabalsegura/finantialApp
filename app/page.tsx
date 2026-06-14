@@ -226,6 +226,9 @@ export default async function Home() {
             <Link className="nav-link" href="/reimbursements">
               Pendientes
             </Link>
+            <Link className="nav-link" href="/monthly-close">
+              Cierre
+            </Link>
           </nav>
         </header>
 
