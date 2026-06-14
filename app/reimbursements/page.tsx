@@ -89,12 +89,17 @@ export default async function ReimbursementsPage() {
               Pendientes de cobrar
             </h1>
           </div>
-          <Link
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink"
-            href="/"
-          >
-            Movimientos
-          </Link>
+          <nav className="flex flex-wrap gap-2">
+            <Link className="nav-link" href="/">
+              Movimientos
+            </Link>
+            <Link className="nav-link" href="/accounts">
+              Cuentas
+            </Link>
+            <Link className="nav-link" href="/savings">
+              Partidas
+            </Link>
+          </nav>
         </header>
 
         {accounts.length > 0 ? (

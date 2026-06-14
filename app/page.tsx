@@ -88,12 +88,17 @@ export default async function Home() {
               Captura rápida
             </h1>
           </div>
-          <Link
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink"
-            href="/reimbursements"
-          >
-            Pendientes de cobrar
-          </Link>
+          <nav className="flex flex-wrap gap-2">
+            <Link className="nav-link" href="/accounts">
+              Cuentas
+            </Link>
+            <Link className="nav-link" href="/savings">
+              Partidas
+            </Link>
+            <Link className="nav-link" href="/reimbursements">
+              Pendientes
+            </Link>
+          </nav>
         </header>
 
         {accounts.length > 0 ? (

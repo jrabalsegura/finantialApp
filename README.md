@@ -35,6 +35,14 @@ La Fase 4 añade gastos reembolsables y pendientes de cobrar:
 - Cobro total o parcial que sube saldo real sin contar como ingreso personal.
 - Conversión del importe pendiente en gasto real sin duplicar el movimiento bancario.
 
+La Fase 5 añade gestión de cuentas y partidas de ahorro:
+
+- Pantalla `/accounts` con creación, edición y eliminación segura de cuentas.
+- Flags de dinero disponible, patrimonio, ahorro mensual y cuenta por defecto.
+- Pantalla `/savings` con creación, edición y eliminación segura de partidas.
+- Asignación y retirada de dinero en partidas de ahorro.
+- Métricas de dinero disponible, dinero asignado y dinero no asignado.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -106,9 +114,9 @@ El seed crea estas cuentas:
 
 También crea categorías básicas de ingresos/gastos y las partidas de ahorro indicadas en `docs/SPEC.md`.
 
-## Pendiente para Fase 5
+## Pendiente para Fase 6
 
 - Layout de aplicación y navegación.
 - Dashboard inicial.
-- CRUD de cuentas, categorías y movimientos.
-- Ahorro, cierre mensual e histórico.
+- CRUD completo de categorías y movimientos.
+- Dashboard, cierre mensual e histórico.

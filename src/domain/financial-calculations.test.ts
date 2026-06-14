@@ -2,17 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateAvailableMoney,
+  calculateAssignedSavings,
   calculateNetWorth,
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
   calculateRealMonthlySavings,
+  calculateUnassignedAvailableMoney,
   getDefaultTransactionImpact,
   isTransactionInMonth,
   transactionAffectsMonthlySavings,
   transactionAffectsNetWorth,
   type AccountForCalculations,
   type ReimbursementForCalculations,
+  type SavingsBucketForCalculations,
   type TransactionForCalculations,
   type TransactionType
 } from "./financial-calculations";
@@ -80,12 +83,23 @@ const reimbursements: ReimbursementForCalculations[] = [
   reimbursement("r5", 100, 0, "uncollectible")
 ];
 
+const savingsBuckets: SavingsBucketForCalculations[] = [
+  { currentAmount: 400 },
+  { currentAmount: "250.50" },
+  { currentAmount: 100 }
+];
+
 test("calcula dinero disponible usando solo cuentas marcadas como disponibles", () => {
   assert.equal(calculateAvailableMoney(accounts), 1500.5);
 });
 
 test("calcula patrimonio total con cuentas patrimoniales y pendientes de cobrar vivos", () => {
   assert.equal(calculateNetWorth(accounts, reimbursements), 11610.5);
+});
+
+test("calcula dinero asignado y dinero disponible no asignado", () => {
+  assert.equal(calculateAssignedSavings(savingsBuckets), 750.5);
+  assert.equal(calculateUnassignedAvailableMoney(accounts, savingsBuckets), 750);
 });
 
 test("calcula ingresos, gastos y ahorro mensual real por flags y mes", () => {

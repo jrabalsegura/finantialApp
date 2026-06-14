@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import type { AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  getDefaultTransactionImpact,
+  toMoneyNumber
+} from "@/domain/financial-calculations";
 import {
   getConvertReimbursementToExpenseRules,
   getQuickTransactionRules,
@@ -20,6 +23,15 @@ const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>([
   "expense",
   "income",
   "transfer"
+]);
+const VALID_ACCOUNT_TYPES = new Set<AccountType>([
+  "checking",
+  "savings",
+  "cash",
+  "investment",
+  "pension",
+  "treasury",
+  "other"
 ]);
 
 export async function createQuickTransaction(
@@ -301,6 +313,319 @@ export async function convertReimbursementToRealExpense(
   revalidateReimbursementViews();
 }
 
+export async function createAccount(formData: FormData): Promise<void> {
+  const name = parseRequiredString(formData.get("name"));
+  const type = parseAccountType(formData.get("type"));
+  const currentBalance = parseAmountAllowingZero(formData.get("currentBalance"));
+  const includeInAvailableMoney = parseCheckbox(
+    formData.get("includeInAvailableMoney")
+  );
+  const includeInNetWorth = parseCheckbox(formData.get("includeInNetWorth"));
+  const includeInMonthlySavings = parseCheckbox(
+    formData.get("includeInMonthlySavings")
+  );
+  const isDefault = parseCheckbox(formData.get("isDefault"));
+  const notes = parseOptionalString(formData.get("notes"));
+
+  await prisma.$transaction(async (tx) => {
+    const accountCount = await tx.account.count();
+    const shouldBeDefault = isDefault || accountCount === 0;
+
+    if (shouldBeDefault) {
+      await tx.account.updateMany({
+        data: { isDefault: false }
+      });
+    }
+
+    await tx.account.create({
+      data: {
+        name,
+        type,
+        currentBalance,
+        includeInAvailableMoney,
+        includeInNetWorth,
+        includeInMonthlySavings,
+        isDefault: shouldBeDefault,
+        notes
+      }
+    });
+  });
+
+  revalidateAccountViews();
+}
+
+export async function updateAccount(formData: FormData): Promise<void> {
+  const id = parseRequiredString(formData.get("id"));
+  const name = parseRequiredString(formData.get("name"));
+  const type = parseAccountType(formData.get("type"));
+  const currentBalance = parseAmountAllowingZero(formData.get("currentBalance"));
+  const includeInAvailableMoney = parseCheckbox(
+    formData.get("includeInAvailableMoney")
+  );
+  const includeInNetWorth = parseCheckbox(formData.get("includeInNetWorth"));
+  const includeInMonthlySavings = parseCheckbox(
+    formData.get("includeInMonthlySavings")
+  );
+  const isDefault = parseCheckbox(formData.get("isDefault"));
+  const notes = parseOptionalString(formData.get("notes"));
+
+  await prisma.$transaction(async (tx) => {
+    if (isDefault) {
+      await tx.account.updateMany({
+        where: {
+          id: {
+            not: id
+          }
+        },
+        data: { isDefault: false }
+      });
+    }
+
+    await tx.account.update({
+      where: { id },
+      data: {
+        name,
+        type,
+        currentBalance,
+        includeInAvailableMoney,
+        includeInNetWorth,
+        includeInMonthlySavings,
+        isDefault,
+        notes
+      }
+    });
+
+    const defaultAccount = await tx.account.findFirst({
+      where: { isDefault: true },
+      select: { id: true }
+    });
+
+    if (!defaultAccount) {
+      await tx.account.update({
+        where: { id },
+        data: { isDefault: true }
+      });
+    }
+  });
+
+  revalidateAccountViews();
+}
+
+export async function deleteAccount(formData: FormData): Promise<void> {
+  const id = parseRequiredString(formData.get("id"));
+
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.account.findUnique({
+      where: { id },
+      select: { isDefault: true }
+    });
+
+    if (!account) {
+      throw new Error("La cuenta no existe.");
+    }
+
+    const relatedTransactions = await tx.transaction.count({
+      where: {
+        OR: [{ accountId: id }, { destinationAccountId: id }]
+      }
+    });
+    const relatedSnapshots = await tx.monthlyAccountSnapshot.count({
+      where: { accountId: id }
+    });
+
+    if (relatedTransactions > 0 || relatedSnapshots > 0) {
+      throw new Error("No se puede eliminar una cuenta con movimientos.");
+    }
+
+    await tx.account.delete({ where: { id } });
+
+    if (account.isDefault) {
+      const nextAccount = await tx.account.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { id: true }
+      });
+
+      if (nextAccount) {
+        await tx.account.update({
+          where: { id: nextAccount.id },
+          data: { isDefault: true }
+        });
+      }
+    }
+  });
+
+  revalidateAccountViews();
+}
+
+export async function createSavingsBucket(formData: FormData): Promise<void> {
+  const name = parseRequiredString(formData.get("name"));
+  const currentAmount = parseAmountAllowingZero(formData.get("currentAmount"));
+  const targetAmount = parseOptionalAmount(formData.get("targetAmount"));
+  const targetDate = parseOptionalDate(formData.get("targetDate"));
+  const priority = parseOptionalInteger(formData.get("priority"));
+  const isLongTerm = parseCheckbox(formData.get("isLongTerm"));
+  const notes = parseOptionalString(formData.get("notes"));
+
+  await prisma.savingsBucket.create({
+    data: {
+      name,
+      currentAmount,
+      targetAmount,
+      targetDate,
+      priority,
+      isLongTerm,
+      notes
+    }
+  });
+
+  revalidateSavingsViews();
+}
+
+export async function updateSavingsBucket(formData: FormData): Promise<void> {
+  const id = parseRequiredString(formData.get("id"));
+  const name = parseRequiredString(formData.get("name"));
+  const currentAmount = parseAmountAllowingZero(formData.get("currentAmount"));
+  const targetAmount = parseOptionalAmount(formData.get("targetAmount"));
+  const targetDate = parseOptionalDate(formData.get("targetDate"));
+  const priority = parseOptionalInteger(formData.get("priority"));
+  const isLongTerm = parseCheckbox(formData.get("isLongTerm"));
+  const notes = parseOptionalString(formData.get("notes"));
+
+  await prisma.savingsBucket.update({
+    where: { id },
+    data: {
+      name,
+      currentAmount,
+      targetAmount,
+      targetDate,
+      priority,
+      isLongTerm,
+      notes
+    }
+  });
+
+  revalidateSavingsViews();
+}
+
+export async function deleteSavingsBucket(formData: FormData): Promise<void> {
+  const id = parseRequiredString(formData.get("id"));
+
+  await prisma.$transaction(async (tx) => {
+    const relatedTransactions = await tx.transaction.count({
+      where: { savingsBucketId: id }
+    });
+    const relatedSnapshots = await tx.monthlyBucketSnapshot.count({
+      where: { savingsBucketId: id }
+    });
+
+    if (relatedTransactions > 0 || relatedSnapshots > 0) {
+      throw new Error("No se puede eliminar una partida con movimientos.");
+    }
+
+    await tx.savingsBucket.delete({ where: { id } });
+  });
+
+  revalidateSavingsViews();
+}
+
+export async function allocateToSavingsBucket(formData: FormData): Promise<void> {
+  const savingsBucketId = parseRequiredString(formData.get("savingsBucketId"));
+  const accountId = parseRequiredString(formData.get("accountId"));
+  const amount = parseAmount(formData.get("amount"));
+  const description =
+    parseOptionalString(formData.get("description")) ?? "Asignación a ahorro";
+  const impact = getDefaultTransactionImpact("savings_allocation");
+
+  await prisma.$transaction(async (tx) => {
+    await assertAccountExists(tx, accountId);
+    await assertSavingsBucketExists(tx, savingsBucketId);
+
+    await tx.savingsBucket.update({
+      where: { id: savingsBucketId },
+      data: {
+        currentAmount: {
+          increment: amount
+        }
+      }
+    });
+
+    await tx.transaction.create({
+      data: {
+        date: new Date(),
+        amount,
+        type: "savings_allocation",
+        description,
+        accountId,
+        savingsBucketId,
+        affectsRealBalance: impact.affectsRealBalance,
+        affectsPersonalExpense: impact.affectsPersonalExpense,
+        affectsPersonalIncome: impact.affectsPersonalIncome,
+        affectsMonthlySavings: impact.affectsMonthlySavings,
+        affectsNetWorth: impact.affectsNetWorth
+      }
+    });
+  });
+
+  revalidateSavingsViews();
+}
+
+export async function withdrawFromSavingsBucket(
+  formData: FormData
+): Promise<void> {
+  const savingsBucketId = parseRequiredString(formData.get("savingsBucketId"));
+  const accountId = parseRequiredString(formData.get("accountId"));
+  const amount = parseAmount(formData.get("amount"));
+  const description =
+    parseOptionalString(formData.get("description")) ?? "Retirada de ahorro";
+  const impact = getDefaultTransactionImpact("savings_withdrawal");
+
+  await prisma.$transaction(async (tx) => {
+    await assertAccountExists(tx, accountId);
+
+    const savingsBucket = await tx.savingsBucket.findUnique({
+      where: { id: savingsBucketId },
+      select: {
+        currentAmount: true
+      }
+    });
+
+    if (!savingsBucket) {
+      throw new Error("La partida de ahorro no existe.");
+    }
+
+    if (amount > toMoneyNumber(savingsBucket.currentAmount)) {
+      throw new Error("No hay suficiente dinero asignado en la partida.");
+    }
+
+    await tx.savingsBucket.update({
+      where: { id: savingsBucketId },
+      data: {
+        currentAmount: {
+          decrement: amount
+        }
+      }
+    });
+
+    await tx.transaction.create({
+      data: {
+        date: new Date(),
+        amount,
+        type: "savings_withdrawal",
+        description,
+        accountId,
+        savingsBucketId,
+        affectsRealBalance: impact.affectsRealBalance,
+        affectsPersonalExpense: impact.affectsPersonalExpense,
+        affectsPersonalIncome: impact.affectsPersonalIncome,
+        affectsMonthlySavings: impact.affectsMonthlySavings,
+        affectsNetWorth: impact.affectsNetWorth
+      }
+    });
+  });
+
+  revalidateSavingsViews();
+}
+
 function parseTransactionType(value: FormDataEntryValue | null): QuickTransactionType {
   if (
     typeof value !== "string" ||
@@ -325,6 +650,60 @@ function parseAmount(value: FormDataEntryValue | null): number {
   }
 
   return amount;
+}
+
+function parseAmountAllowingZero(value: FormDataEntryValue | null): number {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return 0;
+  }
+
+  const normalizedValue = value.replace(",", ".").trim();
+  const amount = Number(normalizedValue);
+
+  if (!Number.isFinite(amount)) {
+    throw new Error("El importe debe ser un número válido.");
+  }
+
+  return amount;
+}
+
+function parseOptionalAmount(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const amount = parseAmount(value);
+
+  return amount;
+}
+
+function parseOptionalInteger(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+
+  if (!Number.isInteger(parsedValue)) {
+    throw new Error("La prioridad debe ser un número entero.");
+  }
+
+  return parsedValue;
+}
+
+function parseCheckbox(value: FormDataEntryValue | null): boolean {
+  return value === "on";
+}
+
+function parseAccountType(value: FormDataEntryValue | null): AccountType {
+  if (
+    typeof value !== "string" ||
+    !VALID_ACCOUNT_TYPES.has(value as AccountType)
+  ) {
+    throw new Error("Tipo de cuenta no válido.");
+  }
+
+  return value as AccountType;
 }
 
 function parseRequiredString(value: FormDataEntryValue | null): string {
@@ -398,6 +777,20 @@ async function assertCategoryMatchesType(
   }
 }
 
+async function assertSavingsBucketExists(
+  tx: Prisma.TransactionClient,
+  savingsBucketId: string
+): Promise<void> {
+  const savingsBucket = await tx.savingsBucket.findUnique({
+    where: { id: savingsBucketId },
+    select: { id: true }
+  });
+
+  if (!savingsBucket) {
+    throw new Error("La partida de ahorro no existe.");
+  }
+}
+
 async function applyBalanceDeltas(
   tx: Prisma.TransactionClient,
   balanceDeltas: Array<{ accountId: string; delta: number }>
@@ -417,4 +810,16 @@ async function applyBalanceDeltas(
 function revalidateReimbursementViews(): void {
   revalidatePath("/");
   revalidatePath("/reimbursements");
+}
+
+function revalidateAccountViews(): void {
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  revalidatePath("/reimbursements");
+  revalidatePath("/savings");
+}
+
+function revalidateSavingsViews(): void {
+  revalidatePath("/");
+  revalidatePath("/savings");
 }

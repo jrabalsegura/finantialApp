@@ -53,6 +53,10 @@ export type ReimbursementForCalculations = {
   dueDate?: Date | string | null;
 };
 
+export type SavingsBucketForCalculations = {
+  currentAmount: MoneyValue;
+};
+
 export type TransactionImpact = {
   affectsRealBalance: boolean;
   affectsPersonalExpense: boolean;
@@ -198,6 +202,21 @@ export function calculateAvailableMoney(
       .filter((account) => account.includeInAvailableMoney)
       .map((account) => account.currentBalance)
   );
+}
+
+export function calculateAssignedSavings(
+  savingsBuckets: SavingsBucketForCalculations[]
+): number {
+  return sumMoney(
+    savingsBuckets.map((savingsBucket) => savingsBucket.currentAmount)
+  );
+}
+
+export function calculateUnassignedAvailableMoney(
+  accounts: AccountForCalculations[],
+  savingsBuckets: SavingsBucketForCalculations[]
+): number {
+  return calculateAvailableMoney(accounts) - calculateAssignedSavings(savingsBuckets);
 }
 
 export function calculatePendingReimbursements(
