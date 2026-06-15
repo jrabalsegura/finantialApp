@@ -14,6 +14,10 @@ import {
   toMoneyNumber
 } from "@/domain/financial-calculations";
 import {
+  ACCOUNT_TYPES,
+  QUICK_TRANSACTION_TYPES
+} from "@/domain/domain-options";
+import {
   getConvertReimbursementToExpenseRules,
   getReimbursementTransactionRules,
   type QuickTransactionType
@@ -40,29 +44,16 @@ type MonthlyCloseAdjustmentImpact = {
   affectsNetWorth: boolean;
 };
 
-const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>([
-  "expense",
-  "income",
-  "transfer",
-  "reimbursable_expense",
-  "reimbursement_income",
-  "savings_allocation"
-]);
+const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>(
+  QUICK_TRANSACTION_TYPES
+);
 const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS = new Set<MonthlyCloseAdjustmentKind>([
   "expense",
   "income",
   "technical",
   "unassigned_savings"
 ]);
-const VALID_ACCOUNT_TYPES = new Set<AccountType>([
-  "checking",
-  "savings",
-  "cash",
-  "investment",
-  "pension",
-  "treasury",
-  "other"
-]);
+const VALID_ACCOUNT_TYPES = new Set<AccountType>(ACCOUNT_TYPES);
 
 export async function createQuickTransaction(
   _previousState: TransactionFormState,

@@ -11,18 +11,12 @@ import {
 import type { MoneyValue } from "@/domain/financial-calculations";
 import { prisma } from "@/lib/prisma";
 import { generateRecurringOccurrencesForMonth } from "@/lib/recurring-transactions";
+import {
+  currencyFormatter,
+  monthYearFormatter as monthFormatter
+} from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const monthFormatter = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric"
-});
 
 type ExistingMonthlyClose = {
   accountSnapshots: Array<{

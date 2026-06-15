@@ -1,13 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-type RecurringType =
-  | "expense"
-  | "income"
-  | "transfer"
-  | "savings_allocation";
-type RecurringFrequency = "monthly" | "weekly";
+import type {
+  RecurringFrequency,
+  RecurringTransactionType
+} from "@prisma/client";
+import { RECURRING_TRANSACTION_TYPE_OPTIONS } from "@/domain/domain-options";
 
 type AccountOption = {
   id: string;
@@ -45,16 +43,9 @@ type RecurringTransactionFieldsProps = {
     name: string;
     savingsBucketId: string | null;
     startDate: string;
-    type: RecurringType;
+    type: RecurringTransactionType;
   };
 };
-
-const typeOptions: Array<{ label: string; value: RecurringType }> = [
-  { value: "expense", label: "Gasto" },
-  { value: "income", label: "Ingreso" },
-  { value: "transfer", label: "Transferencia" },
-  { value: "savings_allocation", label: "Asignación a ahorro" }
-];
 
 export function RecurringTransactionFields({
   accounts,
@@ -63,7 +54,9 @@ export function RecurringTransactionFields({
   savingsBuckets,
   template
 }: RecurringTransactionFieldsProps) {
-  const [type, setType] = useState<RecurringType>(template?.type ?? "expense");
+  const [type, setType] = useState<RecurringTransactionType>(
+    template?.type ?? "expense"
+  );
   const [frequency, setFrequency] = useState<RecurringFrequency>(
     template?.frequency ?? "monthly"
   );
@@ -102,7 +95,7 @@ export function RecurringTransactionFields({
             className="field-input"
             name="type"
             onChange={(event) => {
-              const nextType = event.target.value as RecurringType;
+              const nextType = event.target.value as RecurringTransactionType;
               setType(nextType);
               if (
                 nextType === "transfer" ||
@@ -113,7 +106,7 @@ export function RecurringTransactionFields({
             }}
             value={type}
           >
-            {typeOptions.map((option) => (
+            {RECURRING_TRANSACTION_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

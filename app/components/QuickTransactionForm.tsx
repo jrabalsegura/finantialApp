@@ -11,6 +11,7 @@ import type {
   TransactionFormState,
   createQuickTransaction
 } from "../actions";
+import { QUICK_TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
 import type { QuickTransactionDraft } from "@/domain/quick-transaction-templates";
 
 type AccountOption = { id: string; name: string };
@@ -79,15 +80,6 @@ const submitLabels: Record<QuickTransactionTemplateType, string> = {
   reimbursable_expense: "Guardar gasto reembolsable",
   reimbursement_income: "Guardar cobro de reembolso",
   savings_allocation: "Guardar asignación"
-};
-
-const typeLabels: Record<QuickTransactionTemplateType, string> = {
-  expense: "Gasto",
-  income: "Ingreso",
-  transfer: "Transferencia",
-  reimbursable_expense: "Gasto reembolsable",
-  reimbursement_income: "Cobro de reembolso",
-  savings_allocation: "Asignación a ahorro"
 };
 
 export function QuickTransactionForm({
@@ -261,11 +253,13 @@ export function QuickTransactionForm({
             }
             value={type}
           >
-            {Object.entries(typeLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
+            {Object.entries(QUICK_TRANSACTION_TYPE_LABELS).map(
+              ([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              )
+            )}
           </select>
         </label>
 

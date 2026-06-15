@@ -1,33 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { TransactionType } from "@prisma/client";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
+import {
+  currencyFormatter,
+  shortDateFormatter as dateFormatter
+} from "@/lib/formatters";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const transactionLabels = {
-  balance_adjustment: "Ajuste",
-  expense: "Gasto",
-  income: "Ingreso",
-  investment_gain: "Revalorización",
-  investment_loss: "Pérdida inversión",
-  reimbursable_expense: "Reembolsable",
-  reimbursement_income: "Cobro reembolso",
-  savings_allocation: "Asignación ahorro",
-  savings_withdrawal: "Retirada ahorro",
-  transfer: "Transferencia"
-};
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric"
-});
 
 export default async function SavingsBucketHistoryPage({
   params
@@ -132,10 +114,10 @@ export default async function SavingsBucketHistoryPage({
                         <p className="text-sm font-semibold text-ink">
                           {transaction.description ||
                             transaction.category?.name ||
-                            transactionLabels[transaction.type]}
+                            TRANSACTION_TYPE_LABELS[transaction.type]}
                         </p>
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                          {transactionLabels[transaction.type]}
+                          {TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
                       </div>
                       <p className="text-sm text-muted">
@@ -194,7 +176,7 @@ function formatSignedAmount(amount: number): string {
 
 function getSignedBucketAmount(transaction: {
   amount: { toNumber: () => number } | { toString: () => string } | number | string;
-  type: keyof typeof transactionLabels;
+  type: TransactionType;
 }): number {
   const amount = toMoneyNumber(transaction.amount);
 

@@ -1,18 +1,12 @@
 import Link from "next/link";
 import { WeeklyBudgetCard } from "../components/WeeklyBudgetCard";
+import {
+  currencyFormatter,
+  dayMonthFormatter as dateFormatter
+} from "@/lib/formatters";
 import { getWeeklyBudgetReport } from "@/lib/weekly-budget";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short"
-});
 
 export default async function WeeklyBudgetPage() {
   const report = await getWeeklyBudgetReport();

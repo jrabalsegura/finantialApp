@@ -6,6 +6,7 @@ import {
   type FinancialBackup,
   validateBackup
 } from "@/domain/backup";
+import { dateTimeFormatter } from "@/lib/formatters";
 
 const LAST_BACKUP_STORAGE_KEY = "financial-app:last-backup-downloaded-at";
 const RESTORE_WARNING =
@@ -321,10 +322,7 @@ function formatDateTime(value: string): string {
 
   if (Number.isNaN(date.getTime())) return value;
 
-  return new Intl.DateTimeFormat("es-ES", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(date);
+  return dateTimeFormatter.format(date);
 }
 
 function getDownloadFileName(contentDisposition: string | null): string | null {

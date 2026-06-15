@@ -14,13 +14,12 @@ import {
   calculateUnassignedAvailableMoney,
   toMoneyNumber
 } from "@/domain/financial-calculations";
+import {
+  currencyFormatter,
+  formatDateInputValue
+} from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
 
 export default async function SavingsPage() {
   const [accounts, savingsBuckets] = await Promise.all([
@@ -366,16 +365,4 @@ function Metric({ label, value }: { label: string; value: number }) {
       </p>
     </div>
   );
-}
-
-function formatDateInputValue(date?: Date | null): string {
-  if (!date) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }

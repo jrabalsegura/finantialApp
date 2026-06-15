@@ -4,35 +4,15 @@ import {
   calculateNetWorthVariation,
   toMoneyNumber
 } from "@/domain/financial-calculations";
+import { ACCOUNT_TYPE_LABELS } from "@/domain/domain-options";
+import {
+  currencyFormatter,
+  longDateFormatter as dateFormatter,
+  monthYearFormatter
+} from "@/lib/formatters";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric"
-});
-
-const monthFormatter = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric"
-});
-
-const accountTypeLabels = {
-  cash: "Efectivo",
-  checking: "Corriente",
-  investment: "Inversión",
-  other: "Otra",
-  pension: "Plan de pensiones",
-  savings: "Ahorro",
-  treasury: "Tesoro"
-};
 
 export default async function MonthlyCloseDetailPage({
   params
@@ -205,7 +185,7 @@ export default async function MonthlyCloseDetailPage({
                             {snapshot.account.name}
                           </p>
                           <p className="mt-1 text-xs text-muted">
-                            {accountTypeLabels[snapshot.account.type]}
+                            {ACCOUNT_TYPE_LABELS[snapshot.account.type]}
                           </p>
                         </td>
                         <MoneyCell value={toMoneyNumber(snapshot.calculatedBalance)} />
@@ -378,6 +358,6 @@ function formatAdjustment(
 }
 
 function formatMonth(year: number, month: number): string {
-  const value = monthFormatter.format(new Date(year, month - 1, 1));
+  const value = monthYearFormatter.format(new Date(year, month - 1, 1));
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

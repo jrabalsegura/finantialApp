@@ -6,27 +6,13 @@ import {
 } from "../actions";
 import { prisma } from "@/lib/prisma";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { REIMBURSEMENT_STATUS_LABELS } from "@/domain/domain-options";
+import {
+  currencyFormatter,
+  shortDateFormatter as dateFormatter
+} from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric"
-});
-
-const statusLabels = {
-  pending: "Pendiente",
-  partially_paid: "Parcial",
-  paid: "Cobrado",
-  cancelled: "Cancelado",
-  uncollectible: "Gasto real"
-};
 
 export default async function ReimbursementsPage() {
   const [accounts, categories, reimbursements] = await Promise.all([
@@ -248,7 +234,7 @@ export default async function ReimbursementsPage() {
                             {reimbursement.title}
                           </h3>
                           <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                            {statusLabels[reimbursement.status]}
+                            {REIMBURSEMENT_STATUS_LABELS[reimbursement.status]}
                           </span>
                         </div>
                         <p className="text-sm text-muted">

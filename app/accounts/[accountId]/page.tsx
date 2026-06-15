@@ -1,43 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { TransactionType } from "@prisma/client";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  ACCOUNT_TYPE_LABELS,
+  TRANSACTION_TYPE_LABELS
+} from "@/domain/domain-options";
+import {
+  currencyFormatter,
+  shortDateFormatter as dateFormatter
+} from "@/lib/formatters";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const accountTypeLabels = {
-  cash: "Efectivo",
-  checking: "Corriente",
-  investment: "Inversión",
-  other: "Otra",
-  pension: "Plan de pensiones",
-  savings: "Ahorro",
-  treasury: "Tesoro"
-};
-
-const transactionLabels = {
-  balance_adjustment: "Ajuste",
-  expense: "Gasto",
-  income: "Ingreso",
-  investment_gain: "Revalorización",
-  investment_loss: "Pérdida inversión",
-  reimbursable_expense: "Reembolsable",
-  reimbursement_income: "Cobro reembolso",
-  savings_allocation: "Asignación ahorro",
-  savings_withdrawal: "Retirada ahorro",
-  transfer: "Transferencia"
-};
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric"
-});
 
 export default async function AccountHistoryPage({
   params
@@ -116,7 +91,9 @@ export default async function AccountHistoryPage({
             <h1 className="text-3xl font-semibold text-ink sm:text-4xl">
               {account.name}
             </h1>
-            <p className="text-sm text-muted">{accountTypeLabels[account.type]}</p>
+            <p className="text-sm text-muted">
+              {ACCOUNT_TYPE_LABELS[account.type]}
+            </p>
           </div>
         </header>
 
@@ -173,10 +150,10 @@ export default async function AccountHistoryPage({
                           {transaction.description ||
                             transaction.category?.name ||
                             transaction.savingsBucket?.name ||
-                            transactionLabels[transaction.type]}
+                            TRANSACTION_TYPE_LABELS[transaction.type]}
                         </p>
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                          {transactionLabels[transaction.type]}
+                          {TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
                         {!transaction.affectsRealBalance ? (
                           <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
@@ -231,7 +208,7 @@ function formatAccountRoute(transaction: {
   category: { name: string } | null;
   destinationAccount: { name: string } | null;
   savingsBucket: { name: string } | null;
-  type: keyof typeof transactionLabels;
+  type: TransactionType;
 }) {
   if (transaction.type === "transfer" && transaction.destinationAccount) {
     return `${transaction.account.name} -> ${transaction.destinationAccount.name}`;
@@ -270,7 +247,7 @@ function getSignedAccountAmount(
     }>;
     amount: { toNumber: () => number } | { toString: () => string } | number | string;
     destinationAccountId: string | null;
-    type: keyof typeof transactionLabels;
+    type: TransactionType;
   },
   accountId: string
 ): number {

@@ -10,24 +10,12 @@ import {
   updateQuickTemplateAction
 } from "./actions";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { QUICK_TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
+import { currencyFormatter } from "@/lib/formatters";
 import { getQuickTemplates } from "@/lib/quick-transaction-templates";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const typeLabels = {
-  expense: "Gasto",
-  income: "Ingreso",
-  transfer: "Transferencia",
-  reimbursable_expense: "Gasto reembolsable",
-  reimbursement_income: "Cobro de reembolso",
-  savings_allocation: "Asignación a ahorro"
-};
 
 export default async function QuickTemplatesPage() {
   const [accounts, categories, savingsBuckets, templates] = await Promise.all([
@@ -84,7 +72,7 @@ export default async function QuickTemplatesPage() {
                           {template.name}
                         </h3>
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                          {typeLabels[template.type]}
+                          {QUICK_TRANSACTION_TYPE_LABELS[template.type]}
                         </span>
                         {template.isFavorite ? (
                           <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">

@@ -1,27 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMonthDateRange, toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  currencyFormatter,
+  monthYearFormatter as monthFormatter,
+  shortDateFormatter as dateFormatter
+} from "@/lib/formatters";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 const uncategorizedCategoryId = "sin-categoria";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric"
-});
-
-const monthFormatter = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric"
-});
 
 type TransactionKind = "expense" | "income";
 

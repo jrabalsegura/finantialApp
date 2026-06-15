@@ -3,19 +3,13 @@ import {
   calculateNetWorthVariation,
   toMoneyNumber
 } from "@/domain/financial-calculations";
+import {
+  currencyFormatter,
+  monthYearFormatter
+} from "@/lib/formatters";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const monthFormatter = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric"
-});
 
 export default async function HistoryPage() {
   const closes = await prisma.monthlyClose.findMany({
@@ -223,6 +217,6 @@ function MobileMetric({
 }
 
 function formatMonth(year: number, month: number): string {
-  const value = monthFormatter.format(new Date(year, month - 1, 1));
+  const value = monthYearFormatter.format(new Date(year, month - 1, 1));
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

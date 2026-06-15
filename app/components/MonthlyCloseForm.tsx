@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import type { closeMonth, MonthlyCloseFormState } from "../actions";
+import { currencyFormatter } from "@/lib/formatters";
 
 type MonthlyCloseAccount = {
   calculatedBalance: number;
@@ -39,11 +40,6 @@ const initialState: MonthlyCloseFormState = {
   status: "idle",
   message: ""
 };
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
 
 export function MonthlyCloseForm({
   accounts,

@@ -7,16 +7,12 @@ import {
   updateQuickTemplate,
   type QuickTemplateInput
 } from "@/lib/quick-transaction-templates";
+import { QUICK_TRANSACTION_TYPES } from "@/domain/domain-options";
 import { prisma } from "@/lib/prisma";
 
-const VALID_TYPES = new Set<QuickTransactionTemplateType>([
-  "expense",
-  "income",
-  "transfer",
-  "reimbursable_expense",
-  "reimbursement_income",
-  "savings_allocation"
-]);
+const VALID_TYPES = new Set<QuickTransactionTemplateType>(
+  QUICK_TRANSACTION_TYPES
+);
 
 export async function createQuickTemplateAction(
   formData: FormData

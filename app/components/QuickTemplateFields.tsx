@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { QuickTransactionTemplateType } from "@prisma/client";
+import { QUICK_TRANSACTION_TYPE_OPTIONS } from "@/domain/domain-options";
 
 type TemplateValue = {
   name: string;
@@ -29,18 +30,6 @@ type Props = {
   savingsBuckets: Array<{ id: string; name: string }>;
   template?: TemplateValue;
 };
-
-const typeOptions: Array<{
-  value: QuickTransactionTemplateType;
-  label: string;
-}> = [
-  { value: "expense", label: "Gasto" },
-  { value: "income", label: "Ingreso" },
-  { value: "transfer", label: "Transferencia" },
-  { value: "reimbursable_expense", label: "Gasto reembolsable" },
-  { value: "reimbursement_income", label: "Cobro de reembolso" },
-  { value: "savings_allocation", label: "Asignación a ahorro" }
-];
 
 export function QuickTemplateFields({
   accounts,
@@ -85,7 +74,7 @@ export function QuickTemplateFields({
             }
             value={type}
           >
-            {typeOptions.map((option) => (
+            {QUICK_TRANSACTION_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

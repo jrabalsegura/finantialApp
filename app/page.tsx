@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { TransactionType } from "@prisma/client";
 import { createQuickTransaction } from "./actions";
 import { QuickTransactionForm } from "./components/QuickTransactionForm";
 import { prisma } from "@/lib/prisma";
@@ -21,37 +22,15 @@ import { buildTransactionDraftFromTemplate } from "@/domain/quick-transaction-te
 import { getQuickTemplates } from "@/lib/quick-transaction-templates";
 import { WeeklyBudgetCard } from "./components/WeeklyBudgetCard";
 import { getWeeklyBudgetReport } from "@/lib/weekly-budget";
+import { TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
+import {
+  currencyFormatter,
+  formatDateInputValue,
+  monthYearFormatter as monthFormatter,
+  shortDateFormatter as dateFormatter
+} from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric"
-});
-
-const monthFormatter = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric"
-});
-
-const transactionLabels = {
-  expense: "Gasto",
-  income: "Ingreso",
-  transfer: "Transferencia",
-  balance_adjustment: "Ajuste",
-  reimbursable_expense: "Reembolsable",
-  reimbursement_income: "Cobro reembolso",
-  investment_gain: "Revalorización",
-  investment_loss: "Pérdida inversión",
-  savings_allocation: "Asignación ahorro",
-  savings_withdrawal: "Retirada ahorro"
-};
 
 const uncategorizedCategoryId = "sin-categoria";
 
@@ -519,10 +498,10 @@ export default async function Home() {
                         <span className="text-sm font-semibold text-ink">
                           {transaction.description ||
                             transaction.category?.name ||
-                            transactionLabels[transaction.type]}
+                            TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                          {transactionLabels[transaction.type]}
+                          {TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
                       </div>
                       <p className="text-sm text-muted">
@@ -909,12 +888,7 @@ function buildCategoryDetailHref({
 }
 
 function getTodayInputValue(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return formatDateInputValue(new Date());
 }
 
 function formatCloseMonth(close: { month: number; year: number }): string {
@@ -925,7 +899,7 @@ function formatMovementRoute(transaction: {
   account: { name: string };
   destinationAccount: { name: string } | null;
   category: { name: string } | null;
-  type: keyof typeof transactionLabels;
+  type: TransactionType;
 }): string {
   if (transaction.type === "transfer" && transaction.destinationAccount) {
     return `${transaction.account.name} -> ${transaction.destinationAccount.name}`;
@@ -937,7 +911,7 @@ function formatMovementRoute(transaction: {
 }
 
 function formatMovementAmount(
-  type: keyof typeof transactionLabels,
+  type: TransactionType,
   amount: number
 ): string {
   if (type === "expense" || type === "reimbursable_expense") {

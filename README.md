@@ -140,6 +140,17 @@ La Fase 12 añade plantillas de movimientos rápidos:
 - `npm run db:seed`: ejecuta el seed inicial.
 - `npm run db:studio`: abre Prisma Studio.
 
+## Estructura interna
+
+- `src/domain`: reglas financieras puras, cálculos y opciones tipadas del dominio.
+- `src/lib`: acceso a Prisma, servicios de aplicación y formateadores compartidos.
+- `app/components`: formularios y componentes reutilizados por las rutas.
+- `app/**/actions.ts`: acciones de servidor y validación de entradas.
+
+Las etiquetas y valores permitidos de cuentas, movimientos rápidos, recurrentes
+y reembolsos se centralizan en `src/domain/domain-options.ts`. El formato de
+euros y fechas se centraliza en `src/lib/formatters.ts`.
+
 ## Datos iniciales
 
 El seed crea estas cuentas:

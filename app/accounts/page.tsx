@@ -7,23 +7,13 @@ import {
 } from "../actions";
 import { prisma } from "@/lib/prisma";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  ACCOUNT_TYPE_LABELS,
+  ACCOUNT_TYPE_OPTIONS
+} from "@/domain/domain-options";
+import { currencyFormatter } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
-
-const accountTypes = [
-  { value: "checking", label: "Corriente" },
-  { value: "savings", label: "Ahorro" },
-  { value: "cash", label: "Efectivo" },
-  { value: "investment", label: "Inversión" },
-  { value: "pension", label: "Plan de pensiones" },
-  { value: "treasury", label: "Tesoro" },
-  { value: "other", label: "Otra" }
-] as const;
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
 
 export default async function AccountsPage() {
   const accounts = await prisma.account.findMany({
@@ -93,7 +83,7 @@ export default async function AccountsPage() {
                           ) : null}
                         </div>
                         <p className="text-sm text-muted">
-                          {getAccountTypeLabel(account.type)}
+                          {ACCOUNT_TYPE_LABELS[account.type]}
                         </p>
                       </div>
                       <p className="text-lg font-semibold text-ink">
@@ -201,7 +191,7 @@ function AccountFields({
             defaultValue={account?.type ?? "checking"}
             name="type"
           >
-            {accountTypes.map((type) => (
+            {ACCOUNT_TYPE_OPTIONS.map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label}
               </option>
@@ -267,8 +257,4 @@ function AccountFields({
       </label>
     </>
   );
-}
-
-function getAccountTypeLabel(type: string): string {
-  return accountTypes.find((accountType) => accountType.value === type)?.label ?? type;
 }

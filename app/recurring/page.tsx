@@ -11,39 +11,21 @@ import {
   toggleRecurringTransaction,
   updateRecurringTransaction
 } from "./actions";
-import {
-  getNextScheduledDate,
-  type RecurringTransactionType
-} from "@/domain/recurring-transactions";
+import { getNextScheduledDate } from "@/domain/recurring-transactions";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  RECURRING_OCCURRENCE_STATUS_LABELS,
+  RECURRING_TRANSACTION_TYPE_LABELS
+} from "@/domain/domain-options";
+import {
+  currencyFormatter,
+  formatDateInputValue,
+  shortDateFormatter as dateFormatter
+} from "@/lib/formatters";
 import { generateRecurringOccurrencesForMonth } from "@/lib/recurring-transactions";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric"
-});
-
-const typeLabels: Record<RecurringTransactionType, string> = {
-  expense: "Gasto",
-  income: "Ingreso",
-  transfer: "Transferencia",
-  savings_allocation: "Asignación a ahorro"
-};
-
-const statusLabels = {
-  pending: "Pendiente",
-  confirmed: "Confirmado",
-  skipped: "Omitido"
-};
 const weekdayLabels = [
   "",
   "lunes",
@@ -189,7 +171,7 @@ export default async function RecurringPage() {
                           </h3>
                           <StatusBadge status={occurrence.status} />
                           <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                            {typeLabels[template.type]}
+                            {RECURRING_TRANSACTION_TYPE_LABELS[template.type]}
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-muted">
@@ -252,7 +234,7 @@ export default async function RecurringPage() {
                               Fecha
                               <input
                                 className="field-input"
-                                defaultValue={formatDateInput(
+                                defaultValue={formatDateInputValue(
                                   occurrence.scheduledDate
                                 )}
                                 name="date"
@@ -337,7 +319,7 @@ export default async function RecurringPage() {
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-muted">
-                          {typeLabels[template.type]} ·{" "}
+                          {RECURRING_TRANSACTION_TYPE_LABELS[template.type]} ·{" "}
                           {formatFrequency(template)} ·{" "}
                           {currencyFormatter.format(toMoneyNumber(template.amount))}
                         </p>
@@ -382,13 +364,13 @@ export default async function RecurringPage() {
                             description: template.description,
                             destinationAccountId: template.destinationAccountId,
                             endDate: template.endDate
-                              ? formatDateInput(template.endDate)
+                              ? formatDateInputValue(template.endDate)
                               : "",
                             frequency: template.frequency,
                             isActive: template.isActive,
                             name: template.name,
                             savingsBucketId: template.savingsBucketId,
-                            startDate: formatDateInput(template.startDate),
+                            startDate: formatDateInputValue(template.startDate),
                             type: template.type
                           }}
                         />
@@ -440,7 +422,7 @@ export default async function RecurringPage() {
                   isActive: true,
                   name: "",
                   savingsBucketId: null,
-                  startDate: formatDateInput(
+                  startDate: formatDateInputValue(
                     new Date(today.getFullYear(), today.getMonth(), 1, 12)
                   ),
                   type: "expense"
@@ -475,7 +457,7 @@ function StatusBadge({
 
   return (
     <span className={`rounded-full px-2 py-1 text-xs font-semibold ${tone}`}>
-      {statusLabels[status]}
+      {RECURRING_OCCURRENCE_STATUS_LABELS[status]}
     </span>
   );
 }
@@ -494,14 +476,6 @@ function formatRoute(template: {
   }
 
   return template.account.name;
-}
-
-function formatDateInput(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }
 
 function formatFrequency(template: {

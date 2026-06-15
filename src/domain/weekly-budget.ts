@@ -4,6 +4,7 @@ import {
   type MoneyValue,
   type TransactionType
 } from "./financial-calculations";
+import { currencyFormatter } from "@/lib/formatters";
 
 export type WeeklyBudgetCalculationMode =
   | "full_month_proportional"
@@ -454,10 +455,7 @@ function getStatusMessage({
 }
 
 function formatEuroAmount(value: number): string {
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR"
-  }).format(value);
+  return currencyFormatter.format(value);
 }
 
 function sumExpenses(transactions: VariableExpenseForBudget[]): number {

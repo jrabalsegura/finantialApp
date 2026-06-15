@@ -1,10 +1,6 @@
 import Link from "next/link";
 import type { WeeklyBudgetStatus } from "@/domain/weekly-budget";
-
-const currencyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR"
-});
+import { currencyFormatter } from "@/lib/formatters";
 
 export function WeeklyBudgetCard({
   status

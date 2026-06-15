@@ -11,6 +11,7 @@ import {
   getRecurringTransactionRules,
   validateRecurringDateRange
 } from "@/domain/recurring-transactions";
+import { RECURRING_TRANSACTION_TYPES } from "@/domain/domain-options";
 import {
   confirmAllRecurringOccurrences,
   confirmRecurringOccurrence,
@@ -18,12 +19,9 @@ import {
 } from "@/lib/recurring-transactions";
 import { prisma } from "@/lib/prisma";
 
-const VALID_TYPES = new Set<RecurringTransactionType>([
-  "expense",
-  "income",
-  "transfer",
-  "savings_allocation"
-]);
+const VALID_TYPES = new Set<RecurringTransactionType>(
+  RECURRING_TRANSACTION_TYPES
+);
 const VALID_MODES = new Set<RecurringAutoCreateMode>([
   "pending",
   "automatic"
