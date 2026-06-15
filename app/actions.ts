@@ -15,10 +15,10 @@ import {
 } from "@/domain/financial-calculations";
 import {
   getConvertReimbursementToExpenseRules,
-  getQuickTransactionRules,
   getReimbursementTransactionRules,
   type QuickTransactionType
 } from "@/domain/transaction-rules";
+import { createTransactionFromDraft } from "@/lib/transactions";
 
 export type TransactionFormState = {
   status: "idle" | "success" | "error";
@@ -43,7 +43,10 @@ type MonthlyCloseAdjustmentImpact = {
 const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>([
   "expense",
   "income",
-  "transfer"
+  "transfer",
+  "reimbursable_expense",
+  "reimbursement_income",
+  "savings_allocation"
 ]);
 const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS = new Set<MonthlyCloseAdjustmentKind>([
   "expense",
@@ -74,59 +77,40 @@ export async function createQuickTransaction(
         ? parseRequiredString(formData.get("destinationAccountId"))
         : null;
     const categoryId =
-      type === "transfer"
-        ? null
-        : parseOptionalString(formData.get("categoryId"));
+      type === "expense" ||
+      type === "income" ||
+      type === "reimbursable_expense"
+        ? parseOptionalString(formData.get("categoryId"))
+        : null;
+    const savingsBucketId =
+      type === "savings_allocation"
+        ? parseRequiredString(formData.get("savingsBucketId"))
+        : null;
     const description = parseOptionalString(formData.get("description"));
     const date = parseTransactionDate(formData.get("date"));
-    const rules = getQuickTransactionRules({
+    const personName =
+      type === "reimbursable_expense"
+        ? parseRequiredString(formData.get("personName"))
+        : null;
+    const reimbursementId =
+      type === "reimbursement_income"
+        ? parseRequiredString(formData.get("reimbursementId"))
+        : null;
+
+    await createTransactionFromDraft({
       type,
       amount,
       accountId,
-      destinationAccountId
+      destinationAccountId,
+      categoryId,
+      savingsBucketId,
+      description,
+      date,
+      personName,
+      reimbursementId
     });
 
-    await prisma.$transaction(async (tx) => {
-      await assertAccountExists(tx, accountId);
-
-      if (destinationAccountId) {
-        await assertAccountExists(tx, destinationAccountId);
-      }
-
-      if (categoryId && type !== "transfer") {
-        await assertCategoryMatchesType(tx, categoryId, type);
-      }
-
-      await tx.transaction.create({
-        data: {
-          date,
-          amount,
-          type,
-          description,
-          accountId,
-          destinationAccountId,
-          categoryId,
-          affectsRealBalance: rules.impact.affectsRealBalance,
-          affectsPersonalExpense: rules.impact.affectsPersonalExpense,
-          affectsPersonalIncome: rules.impact.affectsPersonalIncome,
-          affectsMonthlySavings: rules.impact.affectsMonthlySavings,
-          affectsNetWorth: rules.impact.affectsNetWorth
-        }
-      });
-
-      for (const balanceDelta of rules.balanceDeltas) {
-        await tx.account.update({
-          where: { id: balanceDelta.accountId },
-          data: {
-            currentBalance: {
-              increment: balanceDelta.delta
-            }
-          }
-        });
-      }
-    });
-
-    revalidatePath("/");
+    revalidateTransactionViews();
 
     return {
       status: "success",
@@ -1264,7 +1248,7 @@ async function assertAccountExists(
 async function assertCategoryMatchesType(
   tx: Prisma.TransactionClient,
   categoryId: string,
-  type: Exclude<QuickTransactionType, "transfer">
+  type: "expense" | "income"
 ): Promise<void> {
   const category = await tx.category.findUnique({
     where: { id: categoryId },
@@ -1313,6 +1297,13 @@ async function applyBalanceDeltas(
 function revalidateReimbursementViews(): void {
   revalidatePath("/");
   revalidatePath("/reimbursements");
+}
+
+function revalidateTransactionViews(): void {
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  revalidatePath("/reimbursements");
+  revalidatePath("/savings");
 }
 
 function revalidateAccountViews(): void {

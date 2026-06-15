@@ -66,6 +66,14 @@ La Fase 8 completa el histórico y la revisión general:
 - Vistas adaptadas a escritorio y móvil, con estados vacíos útiles.
 - Tests y comentarios para las reglas financieras delicadas.
 
+La Fase 12 añade plantillas de movimientos rápidos:
+
+- Gestión en `/quick-templates`.
+- Accesos favoritos en la captura móvil del dashboard.
+- Borradores editables para gastos, ingresos, transferencias, reembolsables,
+  cobros de reembolso y asignaciones a ahorro.
+- Las plantillas no afectan a saldos ni informes hasta confirmar.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -117,6 +125,7 @@ La Fase 8 completa el histórico y la revisión general:
 - `/accounts`: gestión de cuentas.
 - `/savings`: gestión de partidas de ahorro.
 - `/reimbursements`: pendientes de cobrar.
+- `/quick-templates`: gestión de plantillas y accesos rápidos.
 - `/monthly-close`: asistente de cierre mensual.
 - `/history`: histórico mensual y acceso al detalle de cada cierre.
 

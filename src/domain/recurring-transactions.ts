@@ -1,4 +1,3 @@
-import { getDefaultTransactionImpact } from "./financial-calculations";
 import {
   getQuickTransactionRules,
   type AccountBalanceDelta,
@@ -109,15 +108,10 @@ export function getRecurringTransactionRules(
   validateBaseInput(input);
 
   if (input.type === "savings_allocation") {
-    if (!input.savingsBucketId) {
-      throw new Error("Selecciona una partida de ahorro.");
-    }
-
-    return {
-      impact: getDefaultTransactionImpact("savings_allocation"),
-      balanceDeltas: [],
-      savingsBucketDelta: input.amount
-    };
+    return getQuickTransactionRules({
+      ...input,
+      savingsBucketId: input.savingsBucketId
+    });
   }
 
   const rules = getQuickTransactionRules({
@@ -127,10 +121,7 @@ export function getRecurringTransactionRules(
     destinationAccountId: input.destinationAccountId
   });
 
-  return {
-    ...rules,
-    savingsBucketDelta: 0
-  };
+  return rules;
 }
 
 export function validateRecurringDateRange(

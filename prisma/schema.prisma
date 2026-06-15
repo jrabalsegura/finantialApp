@@ -62,6 +62,15 @@ enum RecurringOccurrenceStatus {
   skipped
 }
 
+enum QuickTransactionTemplateType {
+  expense
+  income
+  transfer
+  reimbursable_expense
+  reimbursement_income
+  savings_allocation
+}
+
 model Account {
   id                      String      @id @default(cuid())
   name                    String      @unique
@@ -75,10 +84,12 @@ model Account {
   createdAt               DateTime    @default(now())
   updatedAt               DateTime    @updatedAt
 
-  transactions               Transaction[]            @relation("TransactionAccount")
-  incomingTransfers          Transaction[]            @relation("TransactionDestinationAccount")
-  recurringTransactions      RecurringTransaction[]   @relation("RecurringTransactionAccount")
-  incomingRecurringTransfers RecurringTransaction[]   @relation("RecurringTransactionDestinationAccount")
+  transactions               Transaction[]              @relation("TransactionAccount")
+  incomingTransfers          Transaction[]              @relation("TransactionDestinationAccount")
+  recurringTransactions      RecurringTransaction[]     @relation("RecurringTransactionAccount")
+  incomingRecurringTransfers RecurringTransaction[]     @relation("RecurringTransactionDestinationAccount")
+  quickTransactionTemplates  QuickTransactionTemplate[] @relation("QuickTransactionTemplateAccount")
+  incomingQuickTemplates     QuickTransactionTemplate[] @relation("QuickTransactionTemplateDestinationAccount")
   monthlySnapshots           MonthlyAccountSnapshot[]
 }
 
@@ -91,8 +102,9 @@ model Category {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  transactions          Transaction[]
-  recurringTransactions RecurringTransaction[]
+  transactions              Transaction[]
+  recurringTransactions     RecurringTransaction[]
+  quickTransactionTemplates QuickTransactionTemplate[]
 }
 
 model SavingsBucket {
@@ -107,9 +119,10 @@ model SavingsBucket {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  transactions          Transaction[]
-  recurringTransactions RecurringTransaction[]
-  monthlySnapshots      MonthlyBucketSnapshot[]
+  transactions              Transaction[]
+  recurringTransactions     RecurringTransaction[]
+  quickTransactionTemplates QuickTransactionTemplate[]
+  monthlySnapshots          MonthlyBucketSnapshot[]
 }
 
 model Transaction {
@@ -186,6 +199,32 @@ model RecurringTransactionOccurrence {
 
   @@unique([recurringTransactionId, year, month])
   @@index([year, month, status])
+}
+
+model QuickTransactionTemplate {
+  id                   String                       @id @default(cuid())
+  name                 String
+  type                 QuickTransactionTemplateType
+  defaultAmount        Decimal?
+  accountId            String?
+  destinationAccountId String?
+  categoryId           String?
+  savingsBucketId      String?
+  defaultDescription   String?
+  icon                 String?
+  color                String?
+  sortOrder            Int                          @default(0)
+  isFavorite           Boolean                      @default(false)
+  isActive             Boolean                      @default(true)
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+
+  account            Account?       @relation("QuickTransactionTemplateAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  destinationAccount Account?       @relation("QuickTransactionTemplateDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
+  category           Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  savingsBucket      SavingsBucket? @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
+
+  @@index([isActive, isFavorite, sortOrder])
 }
 
 model Reimbursement {

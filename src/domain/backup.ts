@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 2;
 export const BACKUP_APP_NAME = "Finanzas personales";
 
 const ACCOUNT_TYPES = [
@@ -42,6 +42,14 @@ const RECURRING_OCCURRENCE_STATUSES = [
   "confirmed",
   "skipped"
 ] as const;
+const QUICK_TRANSACTION_TEMPLATE_TYPES = [
+  "expense",
+  "income",
+  "transfer",
+  "reimbursable_expense",
+  "reimbursement_income",
+  "savings_allocation"
+] as const;
 
 type AccountType = (typeof ACCOUNT_TYPES)[number];
 type CategoryType = (typeof CATEGORY_TYPES)[number];
@@ -53,6 +61,8 @@ type RecurringAutoCreateMode =
   (typeof RECURRING_AUTO_CREATE_MODES)[number];
 type RecurringOccurrenceStatus =
   (typeof RECURRING_OCCURRENCE_STATUSES)[number];
+type QuickTransactionTemplateType =
+  (typeof QUICK_TRANSACTION_TEMPLATE_TYPES)[number];
 
 type TimestampedRecord = {
   id: string;
@@ -173,6 +183,22 @@ export type BackupRecurringTransactionOccurrence = TimestampedRecord & {
   generatedTransactionId: string | null;
 };
 
+export type BackupQuickTransactionTemplate = TimestampedRecord & {
+  name: string;
+  type: QuickTransactionTemplateType;
+  defaultAmount: string | null;
+  accountId: string | null;
+  destinationAccountId: string | null;
+  categoryId: string | null;
+  savingsBucketId: string | null;
+  defaultDescription: string | null;
+  icon: string | null;
+  color: string | null;
+  sortOrder: number;
+  isFavorite: boolean;
+  isActive: boolean;
+};
+
 export type FinancialBackup = {
   metadata: {
     appName: string;
@@ -191,6 +217,7 @@ export type FinancialBackup = {
     monthlyBucketSnapshots: BackupMonthlyBucketSnapshot[];
     recurringTransactions: BackupRecurringTransaction[];
     recurringTransactionOccurrences: BackupRecurringTransactionOccurrence[];
+    quickTransactionTemplates: BackupQuickTransactionTemplate[];
   };
 };
 
@@ -320,6 +347,12 @@ export function validateBackup(input: unknown): BackupValidationResult {
     "data.recurringTransactionOccurrences",
     errors,
     validateRecurringTransactionOccurrence
+  );
+  validateArray(
+    input.data.quickTransactionTemplates,
+    "data.quickTransactionTemplates",
+    errors,
+    validateQuickTransactionTemplate
   );
 
   if (errors.length === 0) {
@@ -601,6 +634,48 @@ function validateRecurringTransactionOccurrence(
   );
 }
 
+function validateQuickTransactionTemplate(
+  value: unknown,
+  path: string,
+  errors: string[]
+) {
+  if (!validateTimestampedRecord(value, path, errors)) return;
+  validateRequiredString(value.name, `${path}.name`, errors);
+  validateEnum(
+    value.type,
+    QUICK_TRANSACTION_TEMPLATE_TYPES,
+    `${path}.type`,
+    errors
+  );
+  validateOptionalDecimal(
+    value.defaultAmount,
+    `${path}.defaultAmount`,
+    errors
+  );
+  validateOptionalString(value.accountId, `${path}.accountId`, errors);
+  validateOptionalString(
+    value.destinationAccountId,
+    `${path}.destinationAccountId`,
+    errors
+  );
+  validateOptionalString(value.categoryId, `${path}.categoryId`, errors);
+  validateOptionalString(
+    value.savingsBucketId,
+    `${path}.savingsBucketId`,
+    errors
+  );
+  validateOptionalString(
+    value.defaultDescription,
+    `${path}.defaultDescription`,
+    errors
+  );
+  validateOptionalString(value.icon, `${path}.icon`, errors);
+  validateOptionalString(value.color, `${path}.color`, errors);
+  validateInteger(value.sortOrder, `${path}.sortOrder`, errors);
+  validateBoolean(value.isFavorite, `${path}.isFavorite`, errors);
+  validateBoolean(value.isActive, `${path}.isActive`, errors);
+}
+
 function validateUniquenessAndRelations(
   backup: FinancialBackup,
   errors: string[]
@@ -627,6 +702,11 @@ function validateUniquenessAndRelations(
   const recurringIds = validateUniqueIds(
     data.recurringTransactions,
     "movimientos recurrentes",
+    errors
+  );
+  validateUniqueIds(
+    data.quickTransactionTemplates,
+    "plantillas rápidas",
     errors
   );
 
@@ -756,6 +836,33 @@ function validateUniquenessAndRelations(
       bucketIds,
       recurring.savingsBucketId,
       `El recurrente ${recurring.id} referencia una partida inexistente.`,
+      errors
+    );
+  }
+
+  for (const template of data.quickTransactionTemplates) {
+    requireOptionalReference(
+      accountIds,
+      template.accountId,
+      `La plantilla rápida ${template.id} referencia una cuenta inexistente.`,
+      errors
+    );
+    requireOptionalReference(
+      accountIds,
+      template.destinationAccountId,
+      `La plantilla rápida ${template.id} referencia una cuenta de destino inexistente.`,
+      errors
+    );
+    requireOptionalReference(
+      categoryIds,
+      template.categoryId,
+      `La plantilla rápida ${template.id} referencia una categoría inexistente.`,
+      errors
+    );
+    requireOptionalReference(
+      bucketIds,
+      template.savingsBucketId,
+      `La plantilla rápida ${template.id} referencia una partida inexistente.`,
       errors
     );
   }

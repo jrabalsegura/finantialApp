@@ -150,6 +150,26 @@ function createValidBackup(): FinancialBackup {
           createdAt: timestamp,
           updatedAt: timestamp
         }
+      ],
+      quickTransactionTemplates: [
+        {
+          id: "quick-template-1",
+          name: "Supermercado",
+          type: "expense",
+          defaultAmount: null,
+          accountId: "account-1",
+          destinationAccountId: null,
+          categoryId: "category-1",
+          savingsBucketId: null,
+          defaultDescription: "Supermercado",
+          icon: null,
+          color: null,
+          sortOrder: 1,
+          isFavorite: true,
+          isActive: true,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
       ]
     }
   };

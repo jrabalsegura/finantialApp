@@ -209,6 +209,120 @@ async function main() {
       }
     }
   }
+
+  const [
+    quickDefaultAccount,
+    quickSavingsAccount,
+    supermarketCategory,
+    restaurantCategory,
+    otherIncomeCategory,
+    houseCategory
+  ] = await Promise.all([
+    prisma.account.findUnique({ where: { name: "Openbank principal" } }),
+    prisma.account.findUnique({ where: { name: "Openbank ahorro" } }),
+    prisma.category.findUnique({ where: { name: "Supermercado" } }),
+    prisma.category.findUnique({ where: { name: "Restaurantes" } }),
+    prisma.category.findUnique({ where: { name: "Otros ingresos" } }),
+    prisma.category.findUnique({ where: { name: "Casa" } })
+  ]);
+
+  if (quickDefaultAccount) {
+    const quickExamples = [
+      {
+        name: "Supermercado",
+        type: "expense" as const,
+        defaultAmount: null,
+        accountId: quickDefaultAccount.id,
+        destinationAccountId: null,
+        categoryId: supermarketCategory?.id ?? null,
+        savingsBucketId: null,
+        defaultDescription: "Supermercado",
+        sortOrder: 1,
+        isFavorite: true
+      },
+      {
+        name: "Café",
+        type: "expense" as const,
+        defaultAmount: 1.5,
+        accountId: quickDefaultAccount.id,
+        destinationAccountId: null,
+        categoryId: restaurantCategory?.id ?? null,
+        savingsBucketId: null,
+        defaultDescription: "Café",
+        sortOrder: 2,
+        isFavorite: true
+      },
+      {
+        name: "Comida fuera",
+        type: "expense" as const,
+        defaultAmount: null,
+        accountId: quickDefaultAccount.id,
+        destinationAccountId: null,
+        categoryId: restaurantCategory?.id ?? null,
+        savingsBucketId: null,
+        defaultDescription: "Comida fuera",
+        sortOrder: 3,
+        isFavorite: true
+      },
+      {
+        name: "Bizum recibido",
+        type: "income" as const,
+        defaultAmount: null,
+        accountId: quickDefaultAccount.id,
+        destinationAccountId: null,
+        categoryId: otherIncomeCategory?.id ?? null,
+        savingsBucketId: null,
+        defaultDescription: "Bizum recibido",
+        sortOrder: 4,
+        isFavorite: true
+      },
+      {
+        name: "Gasto piso alquilado reembolsable",
+        type: "reimbursable_expense" as const,
+        defaultAmount: null,
+        accountId: quickDefaultAccount.id,
+        destinationAccountId: null,
+        categoryId: houseCategory?.id ?? null,
+        savingsBucketId: null,
+        defaultDescription: "Factura piso alquilado",
+        sortOrder: 5,
+        isFavorite: true
+      },
+      ...(quickSavingsAccount
+        ? [
+            {
+              name: "Transferencia a ahorro",
+              type: "transfer" as const,
+              defaultAmount: null,
+              accountId: quickDefaultAccount.id,
+              destinationAccountId: quickSavingsAccount.id,
+              categoryId: null,
+              savingsBucketId: null,
+              defaultDescription: "Transferencia a ahorro",
+              sortOrder: 6,
+              isFavorite: false
+            }
+          ]
+        : [])
+    ];
+
+    for (const template of quickExamples) {
+      const existing = await prisma.quickTransactionTemplate.findFirst({
+        where: { name: template.name },
+        select: { id: true }
+      });
+      if (!existing) {
+        await prisma.quickTransactionTemplate.create({
+          data: {
+            ...template,
+            icon: null,
+            color: null,
+            isActive: true
+          }
+        });
+      }
+    }
+  }
 }
 
 main()

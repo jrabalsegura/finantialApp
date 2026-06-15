@@ -1,26 +1,45 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import {
+  useActionState,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import type { QuickTransactionTemplateType } from "@prisma/client";
 import type {
   TransactionFormState,
   createQuickTransaction
 } from "../actions";
-import type { QuickTransactionType } from "@/domain/transaction-rules";
+import type { QuickTransactionDraft } from "@/domain/quick-transaction-templates";
 
-type AccountOption = {
-  id: string;
-  name: string;
-};
-
+type AccountOption = { id: string; name: string };
 type CategoryOption = {
   id: string;
   name: string;
   type: "expense" | "income" | "both";
 };
+type SavingsBucketOption = { id: string; name: string };
+type ReimbursementOption = {
+  id: string;
+  title: string;
+  personName: string;
+  pendingAmount: number;
+};
+type QuickTemplateOption = {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  draft: QuickTransactionDraft;
+};
 
 type QuickTransactionFormProps = {
   accounts: AccountOption[];
   categories: CategoryOption[];
+  savingsBuckets: SavingsBucketOption[];
+  reimbursements: ReimbursementOption[];
+  templates: QuickTemplateOption[];
   defaultAccountId: string;
   today: string;
   action: typeof createQuickTransaction;
@@ -32,7 +51,7 @@ const initialState: TransactionFormState = {
 };
 
 const transactionModes: Array<{
-  type: QuickTransactionType;
+  type: QuickTransactionTemplateType;
   label: string;
   tone: string;
 }> = [
@@ -53,37 +72,105 @@ const transactionModes: Array<{
   }
 ];
 
+const submitLabels: Record<QuickTransactionTemplateType, string> = {
+  expense: "Guardar gasto",
+  income: "Guardar ingreso",
+  transfer: "Guardar transferencia",
+  reimbursable_expense: "Guardar gasto reembolsable",
+  reimbursement_income: "Guardar cobro de reembolso",
+  savings_allocation: "Guardar asignación"
+};
+
+const typeLabels: Record<QuickTransactionTemplateType, string> = {
+  expense: "Gasto",
+  income: "Ingreso",
+  transfer: "Transferencia",
+  reimbursable_expense: "Gasto reembolsable",
+  reimbursement_income: "Cobro de reembolso",
+  savings_allocation: "Asignación a ahorro"
+};
+
 export function QuickTransactionForm({
   accounts,
   categories,
+  savingsBuckets,
+  reimbursements,
+  templates,
   defaultAccountId,
   today,
   action
 }: QuickTransactionFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialState);
-  const [mode, setMode] = useState<QuickTransactionType>("expense");
+  const [type, setType] =
+    useState<QuickTransactionTemplateType>("expense");
+  const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState(defaultAccountId);
+  const [destinationAccountId, setDestinationAccountId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [savingsBucketId, setSavingsBucketId] = useState("");
+  const [description, setDescription] = useState("");
+  const [activeTemplateName, setActiveTemplateName] = useState<string | null>(
+    null
+  );
+  const amountRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
+  const categoryType = type === "reimbursable_expense" ? "expense" : type;
   const availableCategories = useMemo(
     () =>
       categories.filter(
-        (category) => category.type === "both" || category.type === mode
+        (category) =>
+          category.type === "both" || category.type === categoryType
       ),
-    [categories, mode]
+    [categories, categoryType]
   );
-
   const destinationAccounts = accounts.filter(
     (account) => account.id !== accountId
   );
+  const visibleTemplates = templates.filter(
+    (template) => template.draft.type === type
+  );
 
-  const selectedMode = transactionModes.find((item) => item.type === mode);
+  function selectBaseMode(nextType: QuickTransactionTemplateType) {
+    setType(nextType);
+    setActiveTemplateName(null);
+    setDestinationAccountId("");
+    setCategoryId("");
+    setSavingsBucketId("");
+  }
+
+  function changeType(nextType: QuickTransactionTemplateType) {
+    setType(nextType);
+    setDestinationAccountId("");
+    setCategoryId("");
+    setSavingsBucketId("");
+  }
+
+  function applyTemplate(template: QuickTemplateOption) {
+    const { draft } = template;
+    setType(draft.type);
+    setAmount(draft.amount === null ? "" : String(draft.amount));
+    setAccountId(draft.accountId);
+    setDestinationAccountId(draft.destinationAccountId ?? "");
+    setCategoryId(draft.categoryId ?? "");
+    setSavingsBucketId(draft.savingsBucketId ?? "");
+    setDescription(draft.description);
+    setActiveTemplateName(template.name);
+
+    window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (draft.amount === null) amountRef.current?.focus();
+    }, 0);
+  }
 
   return (
-    <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+    <section
+      className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5"
+      id="quick-transaction"
+    >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {transactionModes.map((item) => {
-          const isSelected = item.type === mode;
-
+          const isSelected = item.type === type && !activeTemplateName;
           return (
             <button
               aria-pressed={isSelected}
@@ -93,7 +180,7 @@ export function QuickTransactionForm({
                   : "border-line bg-surface text-ink"
               }`}
               key={item.type}
-              onClick={() => setMode(item.type)}
+              onClick={() => selectBaseMode(item.type)}
               type="button"
             >
               {item.label}
@@ -102,28 +189,107 @@ export function QuickTransactionForm({
         })}
       </div>
 
-      <form action={formAction} className="mt-5 grid gap-4">
-        <input name="type" type="hidden" value={mode} />
+      <div className="mt-5 border-t border-line pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Accesos rápidos</h2>
+            <p className="mt-1 text-xs text-muted">
+              Elige una plantilla y revisa los datos antes de guardar.
+            </p>
+          </div>
+          <a className="text-sm font-semibold text-accent" href="/quick-templates">
+            Gestionar
+          </a>
+        </div>
+        {visibleTemplates.length ? (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {visibleTemplates.map((template) => (
+              <button
+                className="min-h-16 rounded-lg border border-line bg-surface px-3 py-3 text-left font-semibold text-ink transition hover:border-accent"
+                key={template.id}
+                onClick={() => applyTemplate(template)}
+                style={
+                  template.color
+                    ? { borderLeftColor: template.color, borderLeftWidth: 4 }
+                    : undefined
+                }
+                type="button"
+              >
+                <span className="block text-sm">
+                  {template.icon ? `${template.icon} ` : ""}
+                  {template.name}
+                </span>
+                <span className="mt-1 block text-xs font-normal text-muted">
+                  {template.draft.amount === null
+                    ? "Introducir importe"
+                    : `${template.draft.amount.toFixed(2)} €`}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-lg bg-surface px-3 py-3 text-sm text-muted">
+            No hay plantillas favoritas activas para este tipo de movimiento.
+          </p>
+        )}
+      </div>
+
+      <form action={formAction} className="mt-5 grid gap-4" ref={formRef}>
+        <input name="type" type="hidden" value={type} />
+
+        {activeTemplateName ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span>Plantilla: {activeTemplateName}</span>
+            <button
+              className="font-semibold"
+              onClick={() => setActiveTemplateName(null)}
+              type="button"
+            >
+              Quitar
+            </button>
+          </div>
+        ) : null}
+
+        <label className="field-label">
+          Tipo de movimiento
+          <select
+            className="field-input"
+            onChange={(event) =>
+              changeType(
+                event.target.value as QuickTransactionTemplateType
+              )
+            }
+            value={type}
+          >
+            {Object.entries(typeLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-2 text-sm font-medium text-ink">
+          <label className="field-label">
             Importe
             <input
-              className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+              className="field-input"
               inputMode="decimal"
               min="0.01"
               name="amount"
+              onChange={(event) => setAmount(event.target.value)}
               placeholder="0,00"
+              ref={amountRef}
               required
               step="0.01"
               type="number"
+              value={amount}
             />
           </label>
-
-          <label className="grid gap-2 text-sm font-medium text-ink">
+          <label className="field-label">
             Fecha
             <input
-              className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+              className="field-input"
               defaultValue={today}
               name="date"
               required
@@ -133,12 +299,17 @@ export function QuickTransactionForm({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-2 text-sm font-medium text-ink">
+          <label className="field-label">
             Cuenta
             <select
-              className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+              className="field-input"
               name="accountId"
-              onChange={(event) => setAccountId(event.target.value)}
+              onChange={(event) => {
+                setAccountId(event.target.value);
+                if (event.target.value === destinationAccountId) {
+                  setDestinationAccountId("");
+                }
+              }}
               required
               value={accountId}
             >
@@ -150,14 +321,19 @@ export function QuickTransactionForm({
             </select>
           </label>
 
-          {mode === "transfer" ? (
-            <label className="grid gap-2 text-sm font-medium text-ink">
+          {type === "transfer" ? (
+            <label className="field-label">
               Destino
               <select
-                className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                className="field-input"
                 name="destinationAccountId"
+                onChange={(event) => setDestinationAccountId(event.target.value)}
                 required
+                value={destinationAccountId}
               >
+                <option disabled value="">
+                  Selecciona destino
+                </option>
                 {destinationAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -165,12 +341,18 @@ export function QuickTransactionForm({
                 ))}
               </select>
             </label>
-          ) : (
-            <label className="grid gap-2 text-sm font-medium text-ink">
+          ) : null}
+
+          {type === "expense" ||
+          type === "income" ||
+          type === "reimbursable_expense" ? (
+            <label className="field-label">
               Categoría
               <select
-                className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                className="field-input"
                 name="categoryId"
+                onChange={(event) => setCategoryId(event.target.value)}
+                value={categoryId}
               >
                 <option value="">Sin categoría</option>
                 {availableCategories.map((category) => (
@@ -180,18 +362,65 @@ export function QuickTransactionForm({
                 ))}
               </select>
             </label>
-          )}
+          ) : null}
         </div>
 
-        <label className="grid gap-2 text-sm font-medium text-ink">
+        {type === "savings_allocation" ? (
+          <label className="field-label">
+            Partida de ahorro
+            <select
+              className="field-input"
+              name="savingsBucketId"
+              onChange={(event) => setSavingsBucketId(event.target.value)}
+              required
+              value={savingsBucketId}
+            >
+              <option disabled value="">
+                Selecciona partida
+              </option>
+              {savingsBuckets.map((bucket) => (
+                <option key={bucket.id} value={bucket.id}>
+                  {bucket.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {type === "reimbursable_expense" ? (
+          <label className="field-label">
+            Persona que devolverá el dinero
+            <input className="field-input" name="personName" required />
+          </label>
+        ) : null}
+
+        {type === "reimbursement_income" ? (
+          <label className="field-label">
+            Pendiente cobrado
+            <select className="field-input" name="reimbursementId" required>
+              <option disabled value="">
+                Selecciona pendiente
+              </option>
+              {reimbursements.map((reimbursement) => (
+                <option key={reimbursement.id} value={reimbursement.id}>
+                  {reimbursement.title} · {reimbursement.personName} ·{" "}
+                  {reimbursement.pendingAmount.toFixed(2)} €
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <label className="field-label">
           Descripción
           <input
-            className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+            className="field-input"
             name="description"
-            placeholder={
-              selectedMode?.type === "transfer" ? "Entre cuentas" : "Concepto"
-            }
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder={type === "transfer" ? "Entre cuentas" : "Concepto"}
+            required={type === "reimbursable_expense"}
             type="text"
+            value={description}
           />
         </label>
 
@@ -200,7 +429,7 @@ export function QuickTransactionForm({
           disabled={isPending || accounts.length === 0}
           type="submit"
         >
-          {isPending ? "Guardando..." : selectedMode?.label}
+          {isPending ? "Guardando..." : submitLabels[type]}
         </button>
 
         {state.message ? (

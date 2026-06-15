@@ -17,6 +17,8 @@ import {
 } from "@/domain/financial-calculations";
 import type { MoneyValue } from "@/domain/financial-calculations";
 import { generateRecurringOccurrencesForMonth } from "@/lib/recurring-transactions";
+import { buildTransactionDraftFromTemplate } from "@/domain/quick-transaction-templates";
+import { getQuickTemplates } from "@/lib/quick-transaction-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +69,8 @@ export default async function Home() {
     reimbursements,
     savingsBuckets,
     monthlyCloses,
-    recurringOccurrences
+    recurringOccurrences,
+    quickTemplates
   ] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -184,7 +187,8 @@ export default async function Home() {
           }
         }
       }
-    })
+    }),
+    getQuickTemplates({ activeOnly: true, favoritesOnly: true })
   ]);
 
   const defaultAccount =
@@ -234,6 +238,29 @@ export default async function Home() {
     (total, occurrence) => total + toMoneyNumber(occurrence.amount),
     0
   );
+  const quickTemplateOptions = defaultAccount
+    ? quickTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        icon: template.icon,
+        color: template.color,
+        draft: buildTransactionDraftFromTemplate(template, defaultAccount.id)
+      }))
+    : [];
+  const reimbursementOptions = reimbursements
+    .filter(
+      (reimbursement) =>
+        reimbursement.status === "pending" ||
+        reimbursement.status === "partially_paid"
+    )
+    .map((reimbursement) => ({
+      id: reimbursement.id,
+      title: reimbursement.title,
+      personName: reimbursement.personName,
+      pendingAmount:
+        toMoneyNumber(reimbursement.expectedAmount) -
+        toMoneyNumber(reimbursement.paidAmount)
+    }));
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -262,6 +289,9 @@ export default async function Home() {
             </Link>
             <Link className="nav-link" href="/recurring">
               Fijos
+            </Link>
+            <Link className="nav-link" href="/quick-templates">
+              Accesos rápidos
             </Link>
             <Link className="nav-link" href="/monthly-close">
               Cierre
@@ -439,6 +469,12 @@ export default async function Home() {
                 action={createQuickTransaction}
                 categories={categories}
                 defaultAccountId={defaultAccount.id}
+                reimbursements={reimbursementOptions}
+                savingsBuckets={savingsBuckets.map(({ id, name }) => ({
+                  id,
+                  name
+                }))}
+                templates={quickTemplateOptions}
                 today={getTodayInputValue()}
               />
             ) : (

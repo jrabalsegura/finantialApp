@@ -3,7 +3,13 @@ import {
   type TransactionImpact
 } from "./financial-calculations";
 
-export type QuickTransactionType = "expense" | "income" | "transfer";
+export type QuickTransactionType =
+  | "expense"
+  | "income"
+  | "transfer"
+  | "reimbursable_expense"
+  | "reimbursement_income"
+  | "savings_allocation";
 export type ReimbursementTransactionType =
   | "reimbursable_expense"
   | "reimbursement_income";
@@ -18,11 +24,13 @@ export type QuickTransactionInput = {
   amount: number;
   accountId: string;
   destinationAccountId?: string | null;
+  savingsBucketId?: string | null;
 };
 
 export type QuickTransactionRules = {
   impact: TransactionImpact;
   balanceDeltas: AccountBalanceDelta[];
+  savingsBucketDelta: number;
 };
 
 export type ReimbursementTransactionInput = {
@@ -44,42 +52,57 @@ export function getQuickTransactionRules(
   if (input.type === "expense") {
     return {
       impact: getDefaultTransactionImpact("expense"),
-      balanceDeltas: [{ accountId: input.accountId, delta: -input.amount }]
+      balanceDeltas: [{ accountId: input.accountId, delta: -input.amount }],
+      savingsBucketDelta: 0
     };
   }
 
   if (input.type === "income") {
     return {
       impact: getDefaultTransactionImpact("income"),
-      balanceDeltas: [{ accountId: input.accountId, delta: input.amount }]
+      balanceDeltas: [{ accountId: input.accountId, delta: input.amount }],
+      savingsBucketDelta: 0
+    };
+  }
+
+  if (input.type === "transfer") {
+    return {
+      impact: getDefaultTransactionImpact("transfer"),
+      balanceDeltas: [
+        { accountId: input.accountId, delta: -input.amount },
+        { accountId: input.destinationAccountId as string, delta: input.amount }
+      ],
+      savingsBucketDelta: 0
+    };
+  }
+
+  if (input.type === "reimbursable_expense") {
+    return {
+      impact: getDefaultTransactionImpact("reimbursable_expense"),
+      balanceDeltas: [{ accountId: input.accountId, delta: -input.amount }],
+      savingsBucketDelta: 0
+    };
+  }
+
+  if (input.type === "reimbursement_income") {
+    return {
+      impact: getDefaultTransactionImpact("reimbursement_income"),
+      balanceDeltas: [{ accountId: input.accountId, delta: input.amount }],
+      savingsBucketDelta: 0
     };
   }
 
   return {
-    impact: getDefaultTransactionImpact("transfer"),
-    balanceDeltas: [
-      { accountId: input.accountId, delta: -input.amount },
-      { accountId: input.destinationAccountId as string, delta: input.amount }
-    ]
+    impact: getDefaultTransactionImpact("savings_allocation"),
+    balanceDeltas: [],
+    savingsBucketDelta: input.amount
   };
 }
 
 export function getReimbursementTransactionRules(
   input: ReimbursementTransactionInput
 ): QuickTransactionRules {
-  validateAmountAndAccount(input.amount, input.accountId);
-
-  if (input.type === "reimbursable_expense") {
-    return {
-      impact: getDefaultTransactionImpact("reimbursable_expense"),
-      balanceDeltas: [{ accountId: input.accountId, delta: -input.amount }]
-    };
-  }
-
-  return {
-    impact: getDefaultTransactionImpact("reimbursement_income"),
-    balanceDeltas: [{ accountId: input.accountId, delta: input.amount }]
-  };
+  return getQuickTransactionRules(input);
 }
 
 export function getConvertReimbursementToExpenseRules(
@@ -93,7 +116,8 @@ export function getConvertReimbursementToExpenseRules(
       affectsRealBalance: false,
       affectsNetWorth: false
     },
-    balanceDeltas: []
+    balanceDeltas: [],
+    savingsBucketDelta: 0
   };
 }
 
@@ -108,6 +132,10 @@ function validateQuickTransactionInput(input: QuickTransactionInput): void {
     if (input.destinationAccountId === input.accountId) {
       throw new Error("La cuenta de destino debe ser distinta.");
     }
+  }
+
+  if (input.type === "savings_allocation" && !input.savingsBucketId) {
+    throw new Error("Selecciona una partida de ahorro.");
   }
 }
 

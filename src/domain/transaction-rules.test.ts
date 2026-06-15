@@ -97,6 +97,20 @@ test("cobro de reembolso sube saldo sin contar como ingreso ni ahorro", () => {
   assert.equal(rules.impact.affectsNetWorth, false);
 });
 
+test("asignación rápida incrementa la partida sin tocar cuentas", () => {
+  const rules = getQuickTransactionRules({
+    type: "savings_allocation",
+    amount: 200,
+    accountId: "openbank",
+    savingsBucketId: "reserva"
+  });
+
+  assert.deepEqual(rules.balanceDeltas, []);
+  assert.equal(rules.savingsBucketDelta, 200);
+  assert.equal(rules.impact.affectsRealBalance, false);
+  assert.equal(rules.impact.affectsMonthlySavings, false);
+});
+
 test("conversion a gasto real cuenta como gasto sin volver a tocar saldo bancario", () => {
   const rules = getConvertReimbursementToExpenseRules({
     pendingAmount: 80,

@@ -19,7 +19,8 @@ export async function exportBackup(): Promise<FinancialBackup> {
     monthlyAccountSnapshots,
     monthlyBucketSnapshots,
     recurringTransactions,
-    recurringTransactionOccurrences
+    recurringTransactionOccurrences,
+    quickTransactionTemplates
   ] = await prisma.$transaction([
     prisma.account.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.category.findMany({ orderBy: { createdAt: "asc" } }),
@@ -34,6 +35,9 @@ export async function exportBackup(): Promise<FinancialBackup> {
     prisma.recurringTransaction.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.recurringTransactionOccurrence.findMany({
       orderBy: { createdAt: "asc" }
+    }),
+    prisma.quickTransactionTemplate.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
     })
   ]);
 
@@ -112,7 +116,13 @@ export async function exportBackup(): Promise<FinancialBackup> {
           amount: record.amount.toString(),
           createdAt: record.createdAt.toISOString(),
           updatedAt: record.updatedAt.toISOString()
-        }))
+        })),
+      quickTransactionTemplates: quickTransactionTemplates.map((record) => ({
+        ...record,
+        defaultAmount: record.defaultAmount?.toString() ?? null,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString()
+      }))
     }
   };
 }
@@ -207,6 +217,14 @@ export async function importBackup(input: unknown): Promise<void> {
           updatedAt: new Date(record.updatedAt)
         }))
       });
+      await tx.quickTransactionTemplate.createMany({
+        data: data.quickTransactionTemplates.map((record) => ({
+          ...record,
+          defaultAmount: record.defaultAmount,
+          createdAt: new Date(record.createdAt),
+          updatedAt: new Date(record.updatedAt)
+        }))
+      });
       await tx.monthlyClose.createMany({
         data: data.monthlyCloses.map((record) => ({
           ...record,
@@ -236,6 +254,7 @@ export async function importBackup(input: unknown): Promise<void> {
 }
 
 async function clearCurrentData(tx: Prisma.TransactionClient): Promise<void> {
+  await tx.quickTransactionTemplate.deleteMany();
   await tx.recurringTransactionOccurrence.deleteMany();
   await tx.monthlyAccountSnapshot.deleteMany();
   await tx.monthlyBucketSnapshot.deleteMany();
