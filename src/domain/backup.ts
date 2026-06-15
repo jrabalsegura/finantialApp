@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 2;
+export const BACKUP_SCHEMA_VERSION = 4;
 export const BACKUP_APP_NAME = "Finanzas personales";
 
 const ACCOUNT_TYPES = [
@@ -37,6 +37,7 @@ const RECURRING_TRANSACTION_TYPES = [
   "savings_allocation"
 ] as const;
 const RECURRING_AUTO_CREATE_MODES = ["pending", "automatic"] as const;
+const RECURRING_FREQUENCIES = ["monthly", "weekly"] as const;
 const RECURRING_OCCURRENCE_STATUSES = [
   "pending",
   "confirmed",
@@ -50,6 +51,10 @@ const QUICK_TRANSACTION_TEMPLATE_TYPES = [
   "reimbursement_income",
   "savings_allocation"
 ] as const;
+const WEEKLY_BUDGET_CALCULATION_MODES = [
+  "full_month_proportional",
+  "remaining_days"
+] as const;
 
 type AccountType = (typeof ACCOUNT_TYPES)[number];
 type CategoryType = (typeof CATEGORY_TYPES)[number];
@@ -59,10 +64,13 @@ type RecurringTransactionType =
   (typeof RECURRING_TRANSACTION_TYPES)[number];
 type RecurringAutoCreateMode =
   (typeof RECURRING_AUTO_CREATE_MODES)[number];
+type RecurringFrequency = (typeof RECURRING_FREQUENCIES)[number];
 type RecurringOccurrenceStatus =
   (typeof RECURRING_OCCURRENCE_STATUSES)[number];
 type QuickTransactionTemplateType =
   (typeof QUICK_TRANSACTION_TEMPLATE_TYPES)[number];
+type WeeklyBudgetCalculationMode =
+  (typeof WEEKLY_BUDGET_CALCULATION_MODES)[number];
 
 type TimestampedRecord = {
   id: string;
@@ -165,7 +173,9 @@ export type BackupRecurringTransaction = TimestampedRecord & {
   categoryId: string | null;
   savingsBucketId: string | null;
   description: string | null;
+  frequency: RecurringFrequency;
   dayOfMonth: number;
+  dayOfWeek: number;
   startDate: string;
   endDate: string | null;
   isActive: boolean;
@@ -199,6 +209,14 @@ export type BackupQuickTransactionTemplate = TimestampedRecord & {
   isActive: boolean;
 };
 
+export type BackupBudgetSetting = TimestampedRecord & {
+  monthlyMinimumSavingsTarget: string;
+  savingsBucketId: string | null;
+  calculationMode: WeeklyBudgetCalculationMode;
+  includeReimbursableExpenses: boolean;
+  includePendingTransactions: boolean;
+};
+
 export type FinancialBackup = {
   metadata: {
     appName: string;
@@ -218,6 +236,7 @@ export type FinancialBackup = {
     recurringTransactions: BackupRecurringTransaction[];
     recurringTransactionOccurrences: BackupRecurringTransactionOccurrence[];
     quickTransactionTemplates: BackupQuickTransactionTemplate[];
+    budgetSettings: BackupBudgetSetting[];
   };
 };
 
@@ -353,6 +372,12 @@ export function validateBackup(input: unknown): BackupValidationResult {
     "data.quickTransactionTemplates",
     errors,
     validateQuickTransactionTemplate
+  );
+  validateArray(
+    input.data.budgetSettings,
+    "data.budgetSettings",
+    errors,
+    validateBudgetSetting
   );
 
   if (errors.length === 0) {
@@ -583,12 +608,25 @@ function validateRecurringTransaction(
     errors
   );
   validateOptionalString(value.description, `${path}.description`, errors);
+  validateEnum(
+    value.frequency,
+    RECURRING_FREQUENCIES,
+    `${path}.frequency`,
+    errors
+  );
   validateInteger(value.dayOfMonth, `${path}.dayOfMonth`, errors);
   if (
     typeof value.dayOfMonth === "number" &&
     (value.dayOfMonth < 1 || value.dayOfMonth > 31)
   ) {
     errors.push(`${path}.dayOfMonth debe estar entre 1 y 31.`);
+  }
+  validateInteger(value.dayOfWeek, `${path}.dayOfWeek`, errors);
+  if (
+    typeof value.dayOfWeek === "number" &&
+    (value.dayOfWeek < 1 || value.dayOfWeek > 7)
+  ) {
+    errors.push(`${path}.dayOfWeek debe estar entre 1 y 7.`);
   }
   validateDate(value.startDate, `${path}.startDate`, errors);
   validateOptionalDate(value.endDate, `${path}.endDate`, errors);
@@ -676,6 +714,40 @@ function validateQuickTransactionTemplate(
   validateBoolean(value.isActive, `${path}.isActive`, errors);
 }
 
+function validateBudgetSetting(
+  value: unknown,
+  path: string,
+  errors: string[]
+) {
+  if (!validateTimestampedRecord(value, path, errors)) return;
+  validateDecimal(
+    value.monthlyMinimumSavingsTarget,
+    `${path}.monthlyMinimumSavingsTarget`,
+    errors
+  );
+  validateOptionalString(
+    value.savingsBucketId,
+    `${path}.savingsBucketId`,
+    errors
+  );
+  validateEnum(
+    value.calculationMode,
+    WEEKLY_BUDGET_CALCULATION_MODES,
+    `${path}.calculationMode`,
+    errors
+  );
+  validateBoolean(
+    value.includeReimbursableExpenses,
+    `${path}.includeReimbursableExpenses`,
+    errors
+  );
+  validateBoolean(
+    value.includePendingTransactions,
+    `${path}.includePendingTransactions`,
+    errors
+  );
+}
+
 function validateUniquenessAndRelations(
   backup: FinancialBackup,
   errors: string[]
@@ -707,6 +779,11 @@ function validateUniquenessAndRelations(
   validateUniqueIds(
     data.quickTransactionTemplates,
     "plantillas rápidas",
+    errors
+  );
+  validateUniqueIds(
+    data.budgetSettings,
+    "configuraciones de presupuesto",
     errors
   );
 
@@ -760,8 +837,8 @@ function validateUniquenessAndRelations(
   validateUniqueComposite(
     data.recurringTransactionOccurrences,
     (record) =>
-      `${record.recurringTransactionId}:${record.year}:${record.month}`,
-    "ocurrencias mensuales de recurrentes",
+      `${record.recurringTransactionId}:${record.scheduledDate}`,
+    "fechas de ocurrencias recurrentes",
     errors
   );
   validateUniqueOptionalValues(
@@ -863,6 +940,15 @@ function validateUniquenessAndRelations(
       bucketIds,
       template.savingsBucketId,
       `La plantilla rápida ${template.id} referencia una partida inexistente.`,
+      errors
+    );
+  }
+
+  for (const setting of data.budgetSettings) {
+    requireOptionalReference(
+      bucketIds,
+      setting.savingsBucketId,
+      `La configuración ${setting.id} referencia una partida inexistente.`,
       errors
     );
   }

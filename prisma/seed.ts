@@ -142,6 +142,23 @@ async function main() {
     });
   }
 
+  const minimumSavingsBucket = await prisma.savingsBucket.findUnique({
+    where: { name: "Hipoteca / coche" }
+  });
+
+  await prisma.budgetSetting.upsert({
+    where: { id: "default" },
+    update: {},
+    create: {
+      id: "default",
+      monthlyMinimumSavingsTarget: 300,
+      savingsBucketId: minimumSavingsBucket?.id ?? null,
+      calculationMode: "remaining_days",
+      includeReimbursableExpenses: false,
+      includePendingTransactions: false
+    }
+  });
+
   const [defaultAccount, savingsAccount, salaryCategory, subscriptionCategory, longTermBucket] =
     await Promise.all([
       prisma.account.findUnique({ where: { name: "Openbank principal" } }),

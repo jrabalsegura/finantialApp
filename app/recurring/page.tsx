@@ -44,6 +44,16 @@ const statusLabels = {
   confirmed: "Confirmado",
   skipped: "Omitido"
 };
+const weekdayLabels = [
+  "",
+  "lunes",
+  "martes",
+  "miércoles",
+  "jueves",
+  "viernes",
+  "sábado",
+  "domingo"
+];
 
 export default async function RecurringPage() {
   const today = new Date();
@@ -67,7 +77,13 @@ export default async function RecurringPage() {
         select: { id: true, name: true }
       }),
       prisma.recurringTransaction.findMany({
-        orderBy: [{ isActive: "desc" }, { dayOfMonth: "asc" }, { name: "asc" }],
+        orderBy: [
+          { isActive: "desc" },
+          { frequency: "asc" },
+          { dayOfMonth: "asc" },
+          { dayOfWeek: "asc" },
+          { name: "asc" }
+        ],
         include: {
           account: { select: { name: true } },
           destinationAccount: { select: { name: true } },
@@ -116,7 +132,7 @@ export default async function RecurringPage() {
               Movimientos fijos
             </p>
             <h1 className="text-3xl font-semibold text-ink sm:text-4xl">
-              Recurrentes mensuales
+              Recurrentes mensuales y semanales
             </h1>
             <p className="text-sm text-muted">
               Revisa primero los pendientes; solo los confirmados afectan a tus
@@ -261,7 +277,7 @@ export default async function RecurringPage() {
                           />
                           <ConfirmSubmitButton
                             className="danger-button min-h-12 w-full"
-                            confirmMessage={`¿Omitir "${template.name}" solo este mes?`}
+                            confirmMessage={`¿Omitir "${template.name}" en esta fecha?`}
                           >
                             Omitir
                           </ConfirmSubmitButton>
@@ -283,7 +299,7 @@ export default async function RecurringPage() {
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Plantillas</h2>
             <p className="mt-1 text-sm text-muted">
-              Activa, edita o elimina tus movimientos mensuales.
+              Activa, edita o elimina tus movimientos mensuales y semanales.
             </p>
           </div>
 
@@ -293,7 +309,9 @@ export default async function RecurringPage() {
                 const nextDate = template.isActive
                   ? getNextScheduledDate(template, today)
                   : null;
-                const currentOccurrence = template.occurrences[0];
+                const occurrenceSummary = summarizeOccurrenceStatuses(
+                  template.occurrences
+                );
 
                 return (
                   <li className="grid gap-4 px-4 py-5 sm:px-5" key={template.id}>
@@ -319,7 +337,8 @@ export default async function RecurringPage() {
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-muted">
-                          {typeLabels[template.type]} · Día {template.dayOfMonth} ·{" "}
+                          {typeLabels[template.type]} ·{" "}
+                          {formatFrequency(template)} ·{" "}
                           {currencyFormatter.format(toMoneyNumber(template.amount))}
                         </p>
                         <p className="mt-1 text-xs text-muted">
@@ -327,8 +346,8 @@ export default async function RecurringPage() {
                           {nextDate ? dateFormatter.format(nextDate) : "Sin próxima fecha"}
                           {" · "}
                           Mes actual:{" "}
-                          {currentOccurrence
-                            ? statusLabels[currentOccurrence.status]
+                          {template.occurrences.length > 0
+                            ? occurrenceSummary
                             : "No generado"}
                         </p>
                       </div>
@@ -359,11 +378,13 @@ export default async function RecurringPage() {
                             autoCreateMode: template.autoCreateMode,
                             categoryId: template.categoryId,
                             dayOfMonth: template.dayOfMonth,
+                            dayOfWeek: template.dayOfWeek,
                             description: template.description,
                             destinationAccountId: template.destinationAccountId,
                             endDate: template.endDate
                               ? formatDateInput(template.endDate)
                               : "",
+                            frequency: template.frequency,
                             isActive: template.isActive,
                             name: template.name,
                             savingsBucketId: template.savingsBucketId,
@@ -411,9 +432,11 @@ export default async function RecurringPage() {
                   autoCreateMode: "pending",
                   categoryId: null,
                   dayOfMonth: 1,
+                  dayOfWeek: 1,
                   description: null,
                   destinationAccountId: null,
                   endDate: "",
+                  frequency: "monthly",
                   isActive: true,
                   name: "",
                   savingsBucketId: null,
@@ -479,4 +502,34 @@ function formatDateInput(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function formatFrequency(template: {
+  frequency: "monthly" | "weekly";
+  dayOfMonth: number;
+  dayOfWeek: number;
+}): string {
+  return template.frequency === "weekly"
+    ? `Cada ${weekdayLabels[template.dayOfWeek]}`
+    : `Día ${template.dayOfMonth} de cada mes`;
+}
+
+function summarizeOccurrenceStatuses(
+  occurrences: Array<{ status: "pending" | "confirmed" | "skipped" }>
+): string {
+  const counts = occurrences.reduce(
+    (summary, occurrence) => {
+      summary[occurrence.status] += 1;
+      return summary;
+    },
+    { pending: 0, confirmed: 0, skipped: 0 }
+  );
+
+  return [
+    counts.pending ? `${counts.pending} pendientes` : null,
+    counts.confirmed ? `${counts.confirmed} confirmados` : null,
+    counts.skipped ? `${counts.skipped} omitidos` : null
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }

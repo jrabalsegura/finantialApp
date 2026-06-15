@@ -56,6 +56,11 @@ enum RecurringAutoCreateMode {
   automatic
 }
 
+enum RecurringFrequency {
+  monthly
+  weekly
+}
+
 enum RecurringOccurrenceStatus {
   pending
   confirmed
@@ -69,6 +74,11 @@ enum QuickTransactionTemplateType {
   reimbursable_expense
   reimbursement_income
   savings_allocation
+}
+
+enum WeeklyBudgetCalculationMode {
+  full_month_proportional
+  remaining_days
 }
 
 model Account {
@@ -123,6 +133,20 @@ model SavingsBucket {
   recurringTransactions     RecurringTransaction[]
   quickTransactionTemplates QuickTransactionTemplate[]
   monthlySnapshots          MonthlyBucketSnapshot[]
+  budgetSettings            BudgetSetting[]
+}
+
+model BudgetSetting {
+  id                          String                      @id @default("default")
+  monthlyMinimumSavingsTarget Decimal                     @default(300)
+  savingsBucketId             String?
+  calculationMode             WeeklyBudgetCalculationMode @default(remaining_days)
+  includeReimbursableExpenses Boolean                     @default(false)
+  includePendingTransactions  Boolean                     @default(false)
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
+
+  savingsBucket SavingsBucket? @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
 }
 
 model Transaction {
@@ -164,7 +188,9 @@ model RecurringTransaction {
   categoryId           String?
   savingsBucketId      String?
   description          String?
+  frequency            RecurringFrequency       @default(monthly)
   dayOfMonth           Int                      @default(1)
+  dayOfWeek            Int                      @default(1)
   startDate            DateTime
   endDate              DateTime?
   isActive             Boolean                  @default(true)
@@ -197,7 +223,7 @@ model RecurringTransactionOccurrence {
   recurringTransaction RecurringTransaction @relation(fields: [recurringTransactionId], references: [id], onDelete: Cascade)
   generatedTransaction Transaction?         @relation(fields: [generatedTransactionId], references: [id], onDelete: SetNull)
 
-  @@unique([recurringTransactionId, year, month])
+  @@unique([recurringTransactionId, scheduledDate])
   @@index([year, month, status])
 }
 

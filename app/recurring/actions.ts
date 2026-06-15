@@ -2,6 +2,7 @@
 
 import {
   RecurringAutoCreateMode,
+  RecurringFrequency,
   RecurringTransactionType,
   type Prisma
 } from "@prisma/client";
@@ -26,6 +27,10 @@ const VALID_TYPES = new Set<RecurringTransactionType>([
 const VALID_MODES = new Set<RecurringAutoCreateMode>([
   "pending",
   "automatic"
+]);
+const VALID_FREQUENCIES = new Set<RecurringFrequency>([
+  "monthly",
+  "weekly"
 ]);
 
 export async function createRecurringTransaction(
@@ -136,10 +141,18 @@ function parseRecurringTransactionForm(formData: FormData) {
       ? parseRequiredString(formData.get("savingsBucketId"))
       : null;
   const description = parseOptionalString(formData.get("description"));
-  const dayOfMonth = parseInteger(
-    formData.get("dayOfMonth"),
-    "Día del mes no válido."
-  );
+  const frequency = parseFrequency(formData.get("frequency"));
+  const dayOfMonth =
+    frequency === "monthly"
+      ? parseInteger(formData.get("dayOfMonth"), "Día del mes no válido.")
+      : 1;
+  const dayOfWeek =
+    frequency === "weekly"
+      ? parseInteger(
+          formData.get("dayOfWeek"),
+          "Día de la semana no válido."
+        )
+      : 1;
   const startDate = parseDate(formData.get("startDate"));
   const endDate = parseOptionalDate(formData.get("endDate"));
   const isActive = formData.get("isActive") === "on";
@@ -147,6 +160,18 @@ function parseRecurringTransactionForm(formData: FormData) {
 
   if (dayOfMonth < 1 || dayOfMonth > 31) {
     throw new Error("El día del mes debe estar entre 1 y 31.");
+  }
+  if (dayOfWeek < 1 || dayOfWeek > 7) {
+    throw new Error("El día de la semana no es válido.");
+  }
+  if (
+    frequency === "weekly" &&
+    type !== "expense" &&
+    type !== "income"
+  ) {
+    throw new Error(
+      "La frecuencia semanal solo está disponible para gastos e ingresos."
+    );
   }
 
   validateRecurringDateRange(startDate, endDate);
@@ -167,7 +192,9 @@ function parseRecurringTransactionForm(formData: FormData) {
     categoryId,
     savingsBucketId,
     description,
+    frequency,
     dayOfMonth,
+    dayOfWeek,
     startDate,
     endDate,
     isActive,
@@ -251,6 +278,19 @@ function parseMode(value: FormDataEntryValue | null): RecurringAutoCreateMode {
   return value as RecurringAutoCreateMode;
 }
 
+function parseFrequency(
+  value: FormDataEntryValue | null
+): RecurringFrequency {
+  if (
+    typeof value !== "string" ||
+    !VALID_FREQUENCIES.has(value as RecurringFrequency)
+  ) {
+    throw new Error("Frecuencia recurrente no válida.");
+  }
+
+  return value as RecurringFrequency;
+}
+
 function parseAmount(value: FormDataEntryValue | null): number {
   if (typeof value !== "string") {
     throw new Error("Introduce un importe.");
@@ -326,4 +366,5 @@ function revalidateRecurringViews(): void {
   revalidatePath("/monthly-close");
   revalidatePath("/recurring");
   revalidatePath("/savings");
+  revalidatePath("/weekly-budget");
 }

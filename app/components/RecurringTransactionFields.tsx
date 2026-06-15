@@ -7,6 +7,7 @@ type RecurringType =
   | "income"
   | "transfer"
   | "savings_allocation";
+type RecurringFrequency = "monthly" | "weekly";
 
 type AccountOption = {
   id: string;
@@ -35,9 +36,11 @@ type RecurringTransactionFieldsProps = {
     autoCreateMode: "pending" | "automatic";
     categoryId: string | null;
     dayOfMonth: number;
+    dayOfWeek: number;
     description: string | null;
     destinationAccountId: string | null;
     endDate: string;
+    frequency: RecurringFrequency;
     isActive: boolean;
     name: string;
     savingsBucketId: string | null;
@@ -61,6 +64,9 @@ export function RecurringTransactionFields({
   template
 }: RecurringTransactionFieldsProps) {
   const [type, setType] = useState<RecurringType>(template?.type ?? "expense");
+  const [frequency, setFrequency] = useState<RecurringFrequency>(
+    template?.frequency ?? "monthly"
+  );
   const [accountId, setAccountId] = useState(
     template?.accountId ?? defaultAccountId
   );
@@ -95,7 +101,16 @@ export function RecurringTransactionFields({
           <select
             className="field-input"
             name="type"
-            onChange={(event) => setType(event.target.value as RecurringType)}
+            onChange={(event) => {
+              const nextType = event.target.value as RecurringType;
+              setType(nextType);
+              if (
+                nextType === "transfer" ||
+                nextType === "savings_allocation"
+              ) {
+                setFrequency("monthly");
+              }
+            }}
             value={type}
           >
             {typeOptions.map((option) => (
@@ -201,17 +216,54 @@ export function RecurringTransactionFields({
         ) : null}
 
         <label className="field-label">
-          Día del mes
-          <input
+          Frecuencia
+          <select
             className="field-input"
-            defaultValue={template?.dayOfMonth ?? 1}
-            max="31"
-            min="1"
-            name="dayOfMonth"
-            required
-            type="number"
-          />
+            name="frequency"
+            onChange={(event) =>
+              setFrequency(event.target.value as RecurringFrequency)
+            }
+            value={frequency}
+          >
+            <option value="monthly">Mensual</option>
+            {type === "expense" || type === "income" ? (
+              <option value="weekly">Semanal</option>
+            ) : null}
+          </select>
         </label>
+
+        {frequency === "monthly" ? (
+          <label className="field-label">
+            Día del mes
+            <input
+              className="field-input"
+              defaultValue={template?.dayOfMonth ?? 1}
+              max="31"
+              min="1"
+              name="dayOfMonth"
+              required
+              type="number"
+            />
+          </label>
+        ) : (
+          <label className="field-label">
+            Día de la semana
+            <select
+              className="field-input"
+              defaultValue={template?.dayOfWeek ?? 1}
+              name="dayOfWeek"
+              required
+            >
+              <option value="1">Lunes</option>
+              <option value="2">Martes</option>
+              <option value="3">Miércoles</option>
+              <option value="4">Jueves</option>
+              <option value="5">Viernes</option>
+              <option value="6">Sábado</option>
+              <option value="7">Domingo</option>
+            </select>
+          </label>
+        )}
 
         <label className="field-label">
           Modo

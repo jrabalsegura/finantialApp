@@ -10,8 +10,12 @@ export type RecurringTransactionType =
   | "transfer"
   | "savings_allocation";
 
+export type RecurringFrequency = "monthly" | "weekly";
+
 export type RecurringTemplateForSchedule = {
   dayOfMonth: number;
+  dayOfWeek?: number;
+  frequency?: RecurringFrequency;
   startDate: Date | string;
   endDate?: Date | string | null;
 };
@@ -55,13 +59,44 @@ export function shouldGenerateRecurringTransaction(
   year: number,
   month: number
 ): boolean {
-  const scheduledDate = getScheduledDate(year, month, template.dayOfMonth);
+  return getScheduledDatesForMonth(template, year, month).length > 0;
+}
+
+export function getScheduledDatesForMonth(
+  template: RecurringTemplateForSchedule,
+  year: number,
+  month: number
+): Date[] {
+  validateYearAndMonth(year, month);
+
   const startDate = startOfDay(new Date(template.startDate));
   const endDate = template.endDate
     ? endOfDay(new Date(template.endDate))
     : null;
 
-  return scheduledDate >= startDate && (!endDate || scheduledDate <= endDate);
+  if ((template.frequency ?? "monthly") === "monthly") {
+    const scheduledDate = getScheduledDate(year, month, template.dayOfMonth);
+    return isDateInActiveRange(scheduledDate, startDate, endDate)
+      ? [scheduledDate]
+      : [];
+  }
+
+  const dayOfWeek = template.dayOfWeek ?? 1;
+  validateDayOfWeek(dayOfWeek);
+  const dates: Date[] = [];
+  const lastDay = new Date(year, month, 0).getDate();
+
+  for (let day = 1; day <= lastDay; day += 1) {
+    const candidate = new Date(year, month - 1, day, 12);
+    if (
+      toIsoDayOfWeek(candidate) === dayOfWeek &&
+      isDateInActiveRange(candidate, startDate, endDate)
+    ) {
+      dates.push(candidate);
+    }
+  }
+
+  return dates;
 }
 
 export function getNextScheduledDate(
@@ -82,21 +117,19 @@ export function getNextScheduledDate(
       1,
       12
     );
-    const candidate = getScheduledDate(
+    const candidates = getScheduledDatesForMonth(
+      template,
       candidateMonth.getFullYear(),
-      candidateMonth.getMonth() + 1,
-      template.dayOfMonth
+      candidateMonth.getMonth() + 1
     );
 
-    if (candidate < referenceDate || candidate < startDate) {
-      continue;
+    for (const candidate of candidates) {
+      if (candidate >= referenceDate && candidate >= startDate) {
+        return candidate;
+      }
     }
 
-    if (endDate && candidate > endDate) {
-      return null;
-    }
-
-    return candidate;
+    if (endDate && candidateMonth > endDate) return null;
   }
 
   return null;
@@ -149,6 +182,34 @@ function validateBaseInput(input: RecurringTransactionInput): void {
   if (!input.accountId) {
     throw new Error("Selecciona una cuenta.");
   }
+}
+
+function validateYearAndMonth(year: number, month: number): void {
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new Error("Año no válido.");
+  }
+
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("Mes no válido.");
+  }
+}
+
+function validateDayOfWeek(dayOfWeek: number): void {
+  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 1 || dayOfWeek > 7) {
+    throw new Error("El día de la semana debe estar entre lunes y domingo.");
+  }
+}
+
+function isDateInActiveRange(
+  date: Date,
+  startDate: Date,
+  endDate: Date | null
+): boolean {
+  return date >= startDate && (!endDate || date <= endDate);
+}
+
+function toIsoDayOfWeek(date: Date): number {
+  return date.getDay() === 0 ? 7 : date.getDay();
 }
 
 function startOfDay(date: Date): Date {

@@ -4,6 +4,7 @@ import {
   getNextScheduledDate,
   getRecurringTransactionRules,
   getScheduledDate,
+  getScheduledDatesForMonth,
   shouldGenerateRecurringTransaction,
   validateRecurringDateRange
 } from "./recurring-transactions";
@@ -38,6 +39,59 @@ test("calcula la próxima fecha prevista desde hoy o desde el inicio", () => {
   assert.equal(nextDate?.getFullYear(), 2026);
   assert.equal(nextDate?.getMonth(), 7);
   assert.equal(nextDate?.getDate(), 1);
+});
+
+test("genera todas las ocurrencias semanales del día elegido dentro del mes", () => {
+  const dates = getScheduledDatesForMonth(
+    {
+      frequency: "weekly",
+      dayOfMonth: 1,
+      dayOfWeek: 1,
+      startDate: new Date(2026, 5, 1)
+    },
+    2026,
+    6
+  );
+
+  assert.deepEqual(
+    dates.map((date) => date.getDate()),
+    [1, 8, 15, 22, 29]
+  );
+});
+
+test("una recurrencia semanal respeta las fechas de inicio y fin", () => {
+  const dates = getScheduledDatesForMonth(
+    {
+      frequency: "weekly",
+      dayOfMonth: 1,
+      dayOfWeek: 1,
+      startDate: new Date(2026, 5, 10),
+      endDate: new Date(2026, 5, 23)
+    },
+    2026,
+    6
+  );
+
+  assert.deepEqual(
+    dates.map((date) => date.getDate()),
+    [15, 22]
+  );
+});
+
+test("calcula la próxima fecha semanal desde el día de referencia", () => {
+  const nextDate = getNextScheduledDate(
+    {
+      frequency: "weekly",
+      dayOfMonth: 1,
+      dayOfWeek: 1,
+      startDate: new Date(2026, 5, 1)
+    },
+    new Date(2026, 5, 16)
+  );
+
+  assert.equal(nextDate?.getFullYear(), 2026);
+  assert.equal(nextDate?.getMonth(), 5);
+  assert.equal(nextDate?.getDate(), 22);
 });
 
 test("una ocurrencia de gasto reutiliza las reglas financieras normales", () => {

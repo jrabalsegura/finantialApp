@@ -127,7 +127,9 @@ function createValidBackup(): FinancialBackup {
           categoryId: "category-1",
           savingsBucketId: null,
           description: null,
+          frequency: "monthly",
           dayOfMonth: 14,
+          dayOfWeek: 1,
           startDate: timestamp,
           endDate: null,
           isActive: true,
@@ -167,6 +169,18 @@ function createValidBackup(): FinancialBackup {
           sortOrder: 1,
           isFavorite: true,
           isActive: true,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        }
+      ],
+      budgetSettings: [
+        {
+          id: "default",
+          monthlyMinimumSavingsTarget: "300",
+          savingsBucketId: "bucket-1",
+          calculationMode: "remaining_days",
+          includeReimbursableExpenses: false,
+          includePendingTransactions: false,
           createdAt: timestamp,
           updatedAt: timestamp
         }
@@ -249,4 +263,35 @@ test("rechaza claves únicas duplicadas que impedirían la restauración", () =>
   assert.equal(result.success, false);
   if (result.success) return;
   assert.match(result.errors.join(" "), /meses cerrados/);
+});
+
+test("acepta varias ocurrencias semanales de una plantilla en el mismo mes", () => {
+  const backup = createValidBackup();
+  backup.data.recurringTransactions[0].frequency = "weekly";
+  backup.data.recurringTransactions[0].dayOfWeek = 1;
+  backup.data.recurringTransactionOccurrences.push({
+    ...backup.data.recurringTransactionOccurrences[0],
+    id: "occurrence-2",
+    scheduledDate: "2026-06-21T12:00:00.000Z",
+    generatedTransactionId: null
+  });
+
+  const result = validateBackup(backup);
+
+  assert.equal(result.success, true);
+});
+
+test("rechaza dos ocurrencias de una plantilla en la misma fecha", () => {
+  const backup = createValidBackup();
+  backup.data.recurringTransactionOccurrences.push({
+    ...backup.data.recurringTransactionOccurrences[0],
+    id: "occurrence-2",
+    generatedTransactionId: null
+  });
+
+  const result = validateBackup(backup);
+
+  assert.equal(result.success, false);
+  if (result.success) return;
+  assert.match(result.errors.join(" "), /fechas de ocurrencias/);
 });

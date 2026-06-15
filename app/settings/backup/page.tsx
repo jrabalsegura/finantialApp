@@ -26,6 +26,9 @@ export default function BackupSettingsPage() {
             <Link className="nav-link" href="/accounts">
               Cuentas
             </Link>
+            <Link className="nav-link" href="/settings/budget">
+              Objetivo semanal
+            </Link>
           </nav>
         </header>
 

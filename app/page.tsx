@@ -19,6 +19,8 @@ import type { MoneyValue } from "@/domain/financial-calculations";
 import { generateRecurringOccurrencesForMonth } from "@/lib/recurring-transactions";
 import { buildTransactionDraftFromTemplate } from "@/domain/quick-transaction-templates";
 import { getQuickTemplates } from "@/lib/quick-transaction-templates";
+import { WeeklyBudgetCard } from "./components/WeeklyBudgetCard";
+import { getWeeklyBudgetReport } from "@/lib/weekly-budget";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +72,8 @@ export default async function Home() {
     savingsBuckets,
     monthlyCloses,
     recurringOccurrences,
-    quickTemplates
+    quickTemplates,
+    weeklyBudgetReport
   ] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -188,7 +191,8 @@ export default async function Home() {
         }
       }
     }),
-    getQuickTemplates({ activeOnly: true, favoritesOnly: true })
+    getQuickTemplates({ activeOnly: true, favoritesOnly: true }),
+    getWeeklyBudgetReport(today)
   ]);
 
   const defaultAccount =
@@ -299,11 +303,13 @@ export default async function Home() {
             <Link className="nav-link" href="/history">
               Histórico
             </Link>
-            <Link className="nav-link" href="/settings/backup">
+            <Link className="nav-link" href="/settings/budget">
               Configuración
             </Link>
           </nav>
         </header>
+
+        <WeeklyBudgetCard status={weeklyBudgetReport.status} />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           <section className="order-2 grid gap-6 lg:order-1">

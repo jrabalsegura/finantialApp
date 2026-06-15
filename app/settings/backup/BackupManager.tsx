@@ -167,7 +167,8 @@ export function BackupManager() {
             </h2>
             <p className="mt-1 text-sm text-muted">
               Exporta cuentas, movimientos, categorías, partidas, cierres,
-              reembolsos y movimientos recurrentes en un único JSON.
+              reembolsos, recurrentes y la configuración del objetivo semanal
+              en un único JSON.
             </p>
             <p className="mt-2 text-xs text-muted">
               {lastBackupAt

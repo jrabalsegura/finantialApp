@@ -1,16 +1,20 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import {
+  getScheduledDatesForMonth,
   getRecurringTransactionRules,
-  getScheduledDate,
-  shouldGenerateRecurringTransaction
 } from "@/domain/recurring-transactions";
 import { toMoneyNumber } from "@/domain/financial-calculations";
 
 export async function getActiveRecurringTransactions() {
   return prisma.recurringTransaction.findMany({
     where: { isActive: true },
-    orderBy: [{ dayOfMonth: "asc" }, { name: "asc" }],
+    orderBy: [
+      { frequency: "asc" },
+      { dayOfMonth: "asc" },
+      { dayOfWeek: "asc" },
+      { name: "asc" }
+    ],
     include: {
       account: true,
       destinationAccount: true,
@@ -26,64 +30,69 @@ export async function generateRecurringOccurrencesForMonth(
 ): Promise<void> {
   const templates = await prisma.recurringTransaction.findMany({
     where: { isActive: true },
-    orderBy: [{ dayOfMonth: "asc" }, { createdAt: "asc" }]
+    orderBy: [
+      { frequency: "asc" },
+      { dayOfMonth: "asc" },
+      { dayOfWeek: "asc" },
+      { createdAt: "asc" }
+    ]
   });
 
   for (const template of templates) {
-    if (!shouldGenerateRecurringTransaction(template, year, month)) {
-      continue;
-    }
+    const scheduledDates = getScheduledDatesForMonth(template, year, month);
 
-    try {
-      await prisma.$transaction(async (tx) => {
-        const existing = await tx.recurringTransactionOccurrence.findUnique({
-          where: {
-            recurringTransactionId_year_month: {
+    for (const scheduledDate of scheduledDates) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          const existing =
+            await tx.recurringTransactionOccurrence.findUnique({
+              where: {
+                recurringTransactionId_scheduledDate: {
+                  recurringTransactionId: template.id,
+                  scheduledDate
+                }
+              },
+              select: { id: true }
+            });
+
+          if (existing) {
+            return;
+          }
+
+          const occurrence = await tx.recurringTransactionOccurrence.create({
+            data: {
               recurringTransactionId: template.id,
               year,
-              month
+              month,
+              scheduledDate,
+              amount: template.amount
+            },
+            select: { id: true }
+          });
+
+          await tx.recurringTransaction.update({
+            where: { id: template.id },
+            data: {
+              lastGeneratedMonth: `${year}-${String(month).padStart(2, "0")}`
             }
-          },
-          select: { id: true }
-        });
+          });
 
-        if (existing) {
-          return;
-        }
-
-        const occurrence = await tx.recurringTransactionOccurrence.create({
-          data: {
-            recurringTransactionId: template.id,
-            year,
-            month,
-            scheduledDate: getScheduledDate(year, month, template.dayOfMonth),
-            amount: template.amount
-          },
-          select: { id: true }
-        });
-
-        await tx.recurringTransaction.update({
-          where: { id: template.id },
-          data: {
-            lastGeneratedMonth: `${year}-${String(month).padStart(2, "0")}`
+          if (template.autoCreateMode === "automatic") {
+            await confirmRecurringOccurrenceInTransaction(tx, occurrence.id);
           }
         });
-
-        if (template.autoCreateMode === "automatic") {
-          await confirmRecurringOccurrenceInTransaction(tx, occurrence.id);
+      } catch (error) {
+        // La restricción única evita duplicados si dos cargas generan la misma
+        // fecha recurrente a la vez.
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          continue;
         }
-      });
-    } catch (error) {
-      // La restricción única es la última defensa ante dos cargas simultáneas
-      // del dashboard intentando generar el mismo mes.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        continue;
-      }
 
-      throw error;
+        throw error;
+      }
     }
   }
 }
