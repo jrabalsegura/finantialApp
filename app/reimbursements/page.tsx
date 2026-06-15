@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   convertReimbursementToRealExpense,
   createReimbursableExpense,
@@ -6,6 +5,7 @@ import {
 } from "../actions";
 import { prisma } from "@/lib/prisma";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { formatPlainAmount, normalizeMoney } from "@/domain/money";
 import { REIMBURSEMENT_STATUS_LABELS } from "@/domain/domain-options";
 import {
   currencyFormatter,
@@ -66,7 +66,7 @@ export default async function ReimbursementsPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
-        <header className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Pendientes
@@ -75,17 +75,6 @@ export default async function ReimbursementsPage() {
               Pendientes de cobrar
             </h1>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Movimientos
-            </Link>
-            <Link className="nav-link" href="/accounts">
-              Cuentas
-            </Link>
-            <Link className="nav-link" href="/savings">
-              Partidas
-            </Link>
-          </nav>
         </header>
 
         {accounts.length > 0 ? (
@@ -95,20 +84,20 @@ export default async function ReimbursementsPage() {
             </h2>
             <form action={createReimbursableExpense} className="mt-4 grid gap-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Concepto
                   <input
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     name="title"
                     required
                     type="text"
                   />
                 </label>
 
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Persona
                   <input
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     name="personName"
                     required
                     type="text"
@@ -117,10 +106,10 @@ export default async function ReimbursementsPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Importe
                   <input
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     inputMode="decimal"
                     min="0.01"
                     name="amount"
@@ -131,10 +120,10 @@ export default async function ReimbursementsPage() {
                   />
                 </label>
 
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Fecha
                   <input
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     defaultValue={today}
                     name="date"
                     required
@@ -142,10 +131,10 @@ export default async function ReimbursementsPage() {
                   />
                 </label>
 
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Vencimiento
                   <input
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     name="dueDate"
                     type="date"
                   />
@@ -153,10 +142,10 @@ export default async function ReimbursementsPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Cuenta
                   <select
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     defaultValue={defaultAccount.id}
                     name="accountId"
                     required
@@ -169,10 +158,10 @@ export default async function ReimbursementsPage() {
                   </select>
                 </label>
 
-                <label className="grid gap-2 text-sm font-medium text-ink">
+                <label className="field-label">
                   Categoría
                   <select
-                    className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                    className="field-input"
                     name="categoryId"
                   >
                     <option value="">Sin categoría</option>
@@ -185,17 +174,17 @@ export default async function ReimbursementsPage() {
                 </label>
               </div>
 
-              <label className="grid gap-2 text-sm font-medium text-ink">
+              <label className="field-label">
                 Notas
                 <input
-                  className="h-12 rounded-lg border border-line bg-white px-3 text-base outline-none focus:border-accent"
+                  className="field-input"
                   name="notes"
                   type="text"
                 />
               </label>
 
               <button
-                className="min-h-14 rounded-lg bg-ink px-5 py-3 text-base font-semibold text-white"
+                className="primary-button min-h-14"
                 type="submit"
               >
                 Guardar reembolsable
@@ -220,15 +209,17 @@ export default async function ReimbursementsPage() {
                   reimbursement.expectedAmount
                 );
                 const paidAmount = toMoneyNumber(reimbursement.paidAmount);
-                const pendingAmount = Math.max(expectedAmount - paidAmount, 0);
+                const pendingAmount = normalizeMoney(
+                  Math.max(expectedAmount - paidAmount, 0)
+                );
                 const isOpen =
                   reimbursement.status === "pending" ||
                   reimbursement.status === "partially_paid";
 
                 return (
                   <li className="grid gap-4 px-4 py-4 sm:px-5" key={reimbursement.id}>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <div className="grid gap-1">
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="grid min-w-0 gap-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-semibold text-ink">
                             {reimbursement.title}
@@ -256,11 +247,11 @@ export default async function ReimbursementsPage() {
                         </p>
                       </div>
 
-                      <div className="grid gap-1 text-left sm:text-right">
-                        <p className="text-lg font-semibold text-ink">
+                      <div className="grid min-w-0 gap-1 text-left sm:text-right">
+                        <p className="amount-text text-lg font-semibold text-ink">
                           {currencyFormatter.format(pendingAmount)}
                         </p>
-                        <p className="text-sm text-muted">
+                        <p className="amount-text text-sm text-muted">
                           {currencyFormatter.format(paidAmount)} cobrados de{" "}
                           {currencyFormatter.format(expectedAmount)}
                         </p>
@@ -282,12 +273,12 @@ export default async function ReimbursementsPage() {
                           <input
                             name="amount"
                             type="hidden"
-                            value={pendingAmount}
+                            value={formatPlainAmount(pendingAmount)}
                           />
-                          <label className="grid gap-2 text-sm font-medium text-ink">
+                          <label className="field-label">
                             Cuenta de cobro
                             <select
-                              className="h-11 rounded-lg border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+                              className="field-input h-11 text-sm"
                               defaultValue={
                                 reimbursement.originalTransaction.accountId
                               }
@@ -319,12 +310,12 @@ export default async function ReimbursementsPage() {
                           />
                           <input name="date" type="hidden" value={today} />
                           <div className="grid grid-cols-2 gap-3">
-                            <label className="grid gap-2 text-sm font-medium text-ink">
+                            <label className="field-label">
                               Importe
                               <input
-                                className="h-11 rounded-lg border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+                                className="field-input h-11 text-sm"
                                 inputMode="decimal"
-                                max={pendingAmount}
+                                max={formatPlainAmount(pendingAmount)}
                                 min="0.01"
                                 name="amount"
                                 required
@@ -332,10 +323,10 @@ export default async function ReimbursementsPage() {
                                 type="number"
                               />
                             </label>
-                            <label className="grid gap-2 text-sm font-medium text-ink">
+                            <label className="field-label">
                               Cuenta
                               <select
-                                className="h-11 rounded-lg border border-line bg-white px-3 text-sm outline-none focus:border-accent"
+                                className="field-input h-11 text-sm"
                                 defaultValue={
                                   reimbursement.originalTransaction.accountId
                                 }

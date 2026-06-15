@@ -39,7 +39,7 @@ export default async function HistoryPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-7xl gap-6">
-        <header className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Histórico mensual
@@ -52,14 +52,6 @@ export default async function HistoryPage() {
               un cierre mensual.
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Dashboard
-            </Link>
-            <Link className="nav-link" href="/monthly-close">
-              Nuevo cierre
-            </Link>
-          </nav>
         </header>
 
         {rows.length > 0 ? (
@@ -209,7 +201,7 @@ function MobileMetric({
   return (
     <div>
       <dt className="text-xs font-medium text-muted">{label}</dt>
-      <dd className="mt-1 text-sm font-semibold text-ink">
+      <dd className="amount-text mt-1 text-sm font-semibold text-ink">
         {value === null ? "Sin mes anterior" : currencyFormatter.format(value)}
       </dd>
     </div>

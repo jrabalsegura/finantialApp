@@ -17,7 +17,7 @@ export function MetricCard({
     <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p
-        className={`mt-2 text-2xl font-semibold ${
+        className={`amount-text mt-2 text-2xl font-semibold ${
           tone === "positive"
             ? "text-emerald-700"
             : tone === "negative"
@@ -48,7 +48,7 @@ export function NetWorthVariationCard({
       {variation ? (
         <>
           <p
-            className={`mt-2 text-2xl font-semibold ${
+            className={`amount-text mt-2 text-2xl font-semibold ${
               variation.amount >= 0 ? "text-emerald-700" : "text-rose-700"
             }`}
           >
@@ -163,8 +163,8 @@ export function CategoryBreakdownPanel({
                     year
                   })}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-ink">
                         {item.name}
                       </p>
@@ -173,7 +173,7 @@ export function CategoryBreakdownPanel({
                         {item.count === 1 ? "movimiento" : "movimientos"}
                       </p>
                     </div>
-                    <p className={`text-sm font-semibold ${amountColor}`}>
+                    <p className={`amount-text shrink-0 text-right text-sm font-semibold ${amountColor}`}>
                       {currencyFormatter.format(item.value)}
                     </p>
                   </div>
@@ -209,12 +209,12 @@ function DistributionPanelItem({
 }) {
   const content = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-ink">{item.label}</p>
           <p className="text-xs text-muted">{item.detail || "-"}</p>
         </div>
-        <p className="text-sm font-semibold text-ink">
+        <p className="amount-text shrink-0 text-right text-sm font-semibold text-ink">
           {currencyFormatter.format(item.value)}
         </p>
       </div>

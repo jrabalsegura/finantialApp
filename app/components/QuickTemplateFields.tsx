@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { QuickTransactionTemplateType } from "@prisma/client";
 import { QUICK_TRANSACTION_TYPE_OPTIONS } from "@/domain/domain-options";
+import { formatPlainAmount } from "@/domain/money";
 
 type TemplateValue = {
   name: string;
@@ -85,7 +86,13 @@ export function QuickTemplateFields({
           Importe por defecto
           <input
             className="field-input"
-            defaultValue={template?.defaultAmount ?? ""}
+            defaultValue={
+              template?.defaultAmount === null ||
+              template?.defaultAmount === undefined
+                ? ""
+                : formatPlainAmount(template.defaultAmount)
+            }
+            inputMode="decimal"
             min="0.01"
             name="defaultAmount"
             placeholder="Opcional"

@@ -12,6 +12,8 @@ import type {
   createQuickTransaction
 } from "../actions";
 import { QUICK_TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
+import { formatCurrencyEUR } from "@/lib/formatters";
+import { formatPlainAmount } from "@/domain/money";
 import type { QuickTransactionDraft } from "@/domain/quick-transaction-templates";
 
 type AccountOption = { id: string; name: string };
@@ -141,7 +143,7 @@ export function QuickTransactionForm({
   function applyTemplate(template: QuickTemplateOption) {
     const { draft } = template;
     setType(draft.type);
-    setAmount(draft.amount === null ? "" : String(draft.amount));
+    setAmount(draft.amount === null ? "" : formatPlainAmount(draft.amount));
     setAccountId(draft.accountId);
     setDestinationAccountId(draft.destinationAccountId ?? "");
     setCategoryId(draft.categoryId ?? "");
@@ -166,7 +168,7 @@ export function QuickTransactionForm({
           return (
             <button
               aria-pressed={isSelected}
-              className={`min-h-20 rounded-lg border px-4 py-4 text-left text-base font-semibold transition ${
+              className={`min-h-20 min-w-0 whitespace-normal break-words rounded-lg border px-4 py-4 text-left text-base font-semibold leading-snug transition [overflow-wrap:anywhere] ${
                 isSelected
                   ? `${item.tone} ring-2 ring-ink`
                   : "border-line bg-surface text-ink"
@@ -182,8 +184,8 @@ export function QuickTransactionForm({
       </div>
 
       <div className="mt-5 border-t border-line pt-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <h2 className="text-base font-semibold text-ink">Accesos rápidos</h2>
             <p className="mt-1 text-xs text-muted">
               Elige una plantilla y revisa los datos antes de guardar.
@@ -194,10 +196,10 @@ export function QuickTransactionForm({
           </a>
         </div>
         {visibleTemplates.length ? (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
             {visibleTemplates.map((template) => (
               <button
-                className="min-h-16 rounded-lg border border-line bg-surface px-3 py-3 text-left font-semibold text-ink transition hover:border-accent"
+                className="min-w-0 rounded-lg border border-line bg-surface px-3 py-3 text-left font-semibold text-ink transition hover:border-accent"
                 key={template.id}
                 onClick={() => applyTemplate(template)}
                 style={
@@ -207,14 +209,14 @@ export function QuickTransactionForm({
                 }
                 type="button"
               >
-                <span className="block text-sm">
+                <span className="block break-words text-sm [overflow-wrap:anywhere]">
                   {template.icon ? `${template.icon} ` : ""}
                   {template.name}
                 </span>
-                <span className="mt-1 block text-xs font-normal text-muted">
+                <span className="mt-1 block break-words text-xs font-normal text-muted [overflow-wrap:anywhere]">
                   {template.draft.amount === null
                     ? "Introducir importe"
-                    : `${template.draft.amount.toFixed(2)} €`}
+                    : formatCurrencyEUR(template.draft.amount)}
                 </span>
               </button>
             ))}
@@ -398,7 +400,7 @@ export function QuickTransactionForm({
               {reimbursements.map((reimbursement) => (
                 <option key={reimbursement.id} value={reimbursement.id}>
                   {reimbursement.title} · {reimbursement.personName} ·{" "}
-                  {reimbursement.pendingAmount.toFixed(2)} €
+                  {formatCurrencyEUR(reimbursement.pendingAmount)}
                 </option>
               ))}
             </select>
@@ -419,7 +421,7 @@ export function QuickTransactionForm({
         </label>
 
         <button
-          className="min-h-14 rounded-lg bg-ink px-5 py-3 text-base font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+          className="primary-button min-h-14"
           disabled={isPending || accounts.length === 0}
           type="submit"
         >

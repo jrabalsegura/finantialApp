@@ -2,6 +2,11 @@
 
 import { useActionState, useMemo, useState } from "react";
 import type { closeMonth, MonthlyCloseFormState } from "../actions";
+import {
+  formatPlainAmount,
+  normalizeMoney,
+  parseMoneyInput
+} from "@/domain/money";
 import { currencyFormatter } from "@/lib/formatters";
 
 type MonthlyCloseAccount = {
@@ -374,7 +379,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">
+      <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {currencyFormatter.format(value)}
       </p>
     </div>
@@ -385,7 +390,7 @@ function ReadOnlyAmount({ label, value }: { label: string; value: number }) {
   return (
     <div className="grid gap-2 text-sm font-medium text-ink">
       <span>{label}</span>
-      <span className="flex h-12 items-center rounded-lg border border-line bg-surface px-3 text-base">
+      <span className="amount-text flex min-h-12 items-center rounded-lg border border-line bg-surface px-3 py-2 text-base">
         {currencyFormatter.format(value)}
       </span>
     </div>
@@ -413,7 +418,7 @@ function StepHeader({
 }
 
 function formatInputAmount(value: number): string {
-  return String(Math.round(value * 100) / 100);
+  return formatPlainAmount(value);
 }
 
 function parseInputAmount(value: string | undefined): number {
@@ -421,11 +426,11 @@ function parseInputAmount(value: string | undefined): number {
     return 0;
   }
 
-  const amount = Number(value.replace(",", "."));
+  const amount = parseMoneyInput(value);
 
   return Number.isFinite(amount) ? amount : 0;
 }
 
 function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+  return normalizeMoney(value);
 }

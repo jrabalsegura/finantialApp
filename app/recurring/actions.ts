@@ -12,6 +12,7 @@ import {
   validateRecurringDateRange
 } from "@/domain/recurring-transactions";
 import { RECURRING_TRANSACTION_TYPES } from "@/domain/domain-options";
+import { parseMoneyInput } from "@/domain/money";
 import {
   confirmAllRecurringOccurrences,
   confirmRecurringOccurrence,
@@ -294,7 +295,7 @@ function parseAmount(value: FormDataEntryValue | null): number {
     throw new Error("Introduce un importe.");
   }
 
-  const amount = Number(value.replace(",", ".").trim());
+  const amount = parseMoneyInput(value);
 
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("El importe debe ser mayor que cero.");

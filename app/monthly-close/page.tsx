@@ -168,7 +168,7 @@ export default async function MonthlyClosePage({
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-6xl gap-6">
-        <header className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Cierre mensual
@@ -178,17 +178,6 @@ export default async function MonthlyClosePage({
             </h1>
             <p className="text-sm text-muted">{monthLabel}</p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Dashboard
-            </Link>
-            <Link className="nav-link" href="/savings">
-              Partidas
-            </Link>
-            <Link className="nav-link" href="/history">
-              Histórico
-            </Link>
-          </nav>
         </header>
 
         <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
@@ -282,23 +271,23 @@ function ExistingClose({
         <ul className="divide-y divide-line">
           {close.accountSnapshots.map((snapshot) => (
             <li
-              className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:px-5"
+              className="grid min-w-0 gap-2 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:px-5"
               key={snapshot.account.name}
             >
               <p className="text-sm font-semibold text-ink">
                 {snapshot.account.name}
               </p>
-              <p className="text-sm text-muted">
+              <p className="amount-text text-sm text-muted sm:text-right">
                 Calculado:{" "}
                 {currencyFormatter.format(
                   toMoneyNumber(snapshot.calculatedBalance)
                 )}
               </p>
-              <p className="text-sm text-muted">
+              <p className="amount-text text-sm text-muted sm:text-right">
                 Real:{" "}
                 {currencyFormatter.format(toMoneyNumber(snapshot.realBalance))}
               </p>
-              <p className="text-sm font-semibold text-ink">
+              <p className="amount-text text-sm font-semibold text-ink sm:text-right">
                 Dif.:{" "}
                 {currencyFormatter.format(toMoneyNumber(snapshot.difference))}
               </p>
@@ -320,7 +309,7 @@ function ExistingClose({
                 className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
                 key={snapshot.savingsBucket.name}
               >
-                <p className="text-sm font-semibold text-ink">
+                <p className="amount-text text-sm font-semibold text-ink sm:text-right">
                   {snapshot.savingsBucket.name}
                 </p>
                 <p className="text-sm font-semibold text-ink">
@@ -343,7 +332,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">
+      <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {currencyFormatter.format(value)}
       </p>
     </div>

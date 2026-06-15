@@ -14,6 +14,7 @@ import {
   calculateUnassignedAvailableMoney,
   toMoneyNumber
 } from "@/domain/financial-calculations";
+import { formatPlainAmount } from "@/domain/money";
 import {
   currencyFormatter,
   formatDateInputValue
@@ -62,7 +63,7 @@ export default async function SavingsPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
-        <header className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Ahorro
@@ -71,14 +72,6 @@ export default async function SavingsPage() {
               Partidas de ahorro
             </h1>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Movimientos
-            </Link>
-            <Link className="nav-link" href="/accounts">
-              Cuentas
-            </Link>
-          </nav>
         </header>
 
         <section className="grid gap-3 sm:grid-cols-3">
@@ -106,8 +99,8 @@ export default async function SavingsPage() {
 
                 return (
                   <li className="grid gap-5 px-4 py-5 sm:px-5" key={bucket.id}>
-                    <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
-                      <div>
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-semibold text-ink">
                             {bucket.name}
@@ -124,7 +117,7 @@ export default async function SavingsPage() {
                             : "Sin objetivo definido"}
                         </p>
                       </div>
-                      <p className="text-lg font-semibold text-ink">
+                        <p className="amount-text text-lg font-semibold text-ink sm:text-right">
                         {currencyFormatter.format(amount)}
                       </p>
                     </div>
@@ -148,6 +141,7 @@ export default async function SavingsPage() {
                           Asignar importe
                           <input
                             className="field-input"
+                            inputMode="decimal"
                             min="0.01"
                             name="amount"
                             required
@@ -184,7 +178,8 @@ export default async function SavingsPage() {
                           Retirar importe
                           <input
                             className="field-input"
-                            max={amount}
+                            inputMode="decimal"
+                            max={formatPlainAmount(amount)}
                             min="0.01"
                             name="amount"
                             required
@@ -293,7 +288,8 @@ function SavingsBucketFields({
           Importe asignado
           <input
             className="field-input"
-            defaultValue={bucket?.currentAmount ?? 0}
+            defaultValue={formatPlainAmount(bucket?.currentAmount ?? 0)}
+            inputMode="decimal"
             name="currentAmount"
             step="0.01"
             type="number"
@@ -304,7 +300,13 @@ function SavingsBucketFields({
           Objetivo
           <input
             className="field-input"
-            defaultValue={bucket?.targetAmount ?? ""}
+            defaultValue={
+              bucket?.targetAmount === null ||
+              bucket?.targetAmount === undefined
+                ? ""
+                : formatPlainAmount(bucket.targetAmount)
+            }
+            inputMode="decimal"
             name="targetAmount"
             step="0.01"
             type="number"
@@ -360,7 +362,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-ink">
+      <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {currencyFormatter.format(value)}
       </p>
     </div>

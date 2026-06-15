@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
 import {
   createAccount,
@@ -11,6 +10,7 @@ import {
   ACCOUNT_TYPE_LABELS,
   ACCOUNT_TYPE_OPTIONS
 } from "@/domain/domain-options";
+import { formatPlainAmount } from "@/domain/money";
 import { currencyFormatter } from "@/lib/formatters";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function AccountsPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
-        <header className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Cuentas
@@ -43,14 +43,6 @@ export default async function AccountsPage() {
               Gestión de cuentas
             </h1>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Movimientos
-            </Link>
-            <Link className="nav-link" href="/savings">
-              Partidas
-            </Link>
-          </nav>
         </header>
 
         <section className="rounded-lg border border-line bg-white shadow-sm">
@@ -70,8 +62,8 @@ export default async function AccountsPage() {
 
                 return (
                   <li className="grid gap-4 px-4 py-5 sm:px-5" key={account.id}>
-                    <div className="grid gap-1 sm:grid-cols-[1fr_auto] sm:items-start">
-                      <div>
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-semibold text-ink">
                             {account.name}
@@ -86,7 +78,7 @@ export default async function AccountsPage() {
                           {ACCOUNT_TYPE_LABELS[account.type]}
                         </p>
                       </div>
-                      <p className="text-lg font-semibold text-ink">
+                      <p className="amount-text text-lg font-semibold text-ink sm:text-right">
                         {currencyFormatter.format(
                           toMoneyNumber(account.currentBalance)
                         )}
@@ -203,7 +195,8 @@ function AccountFields({
           Saldo actual
           <input
             className="field-input"
-            defaultValue={account?.currentBalance ?? 0}
+            defaultValue={formatPlainAmount(account?.currentBalance ?? 0)}
+            inputMode="decimal"
             name="currentBalance"
             step="0.01"
             type="number"

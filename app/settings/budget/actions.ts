@@ -5,6 +5,7 @@ import {
   type Prisma
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { parseMoneyInput } from "@/domain/money";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BUDGET_SETTING_ID } from "@/lib/weekly-budget";
 
@@ -58,7 +59,7 @@ function parseNonNegativeAmount(value: FormDataEntryValue | null): number {
     throw new Error("Introduce el ahorro mínimo mensual.");
   }
 
-  const amount = Number(value.replace(",", ".").trim());
+  const amount = parseMoneyInput(value);
   if (!Number.isFinite(amount) || amount < 0) {
     throw new Error("El ahorro mínimo debe ser cero o mayor.");
   }

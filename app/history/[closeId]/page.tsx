@@ -302,7 +302,7 @@ function Metric({
   return (
     <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-muted">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${color}`}>
+      <p className={`amount-text mt-2 text-2xl font-semibold ${color}`}>
         {value === null
           ? emptyText || "-"
           : currencyFormatter.format(value)}
@@ -333,7 +333,7 @@ function CompactAmount({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-semibold text-ink">
+      <dd className="amount-text mt-1 text-sm font-semibold text-ink">
         {currencyFormatter.format(value)}
       </dd>
     </div>

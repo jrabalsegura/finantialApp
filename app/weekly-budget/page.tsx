@@ -15,7 +15,7 @@ export default async function WeeklyBudgetPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
-        <header className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Objetivo semanal
@@ -28,14 +28,6 @@ export default async function WeeklyBudgetPage() {
               {dateFormatter.format(status.weekEnd)}
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Dashboard
-            </Link>
-            <Link className="nav-link" href="/settings/budget">
-              Configurar
-            </Link>
-          </nav>
         </header>
 
         <WeeklyBudgetCard status={status} />

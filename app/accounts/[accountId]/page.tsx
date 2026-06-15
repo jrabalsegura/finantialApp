@@ -108,7 +108,7 @@ export default async function AccountHistoryPage({
           />
           <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-muted">Movimientos</p>
-            <p className="mt-2 text-3xl font-semibold text-ink">
+            <p className="amount-text mt-2 text-3xl font-semibold text-ink">
               {transactions.length}
             </p>
             <p className="mt-2 text-xs leading-5 text-muted">
@@ -141,7 +141,7 @@ export default async function AccountHistoryPage({
 
                 return (
                   <li
-                    className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                    className="grid min-w-0 gap-2 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
                     key={transaction.id}
                   >
                     <div className="grid gap-1">
@@ -167,7 +167,7 @@ export default async function AccountHistoryPage({
                       </p>
                     </div>
                     <p
-                      className={`text-lg font-semibold ${
+                      className={`amount-text text-lg font-semibold sm:text-right ${
                         isPositive
                           ? "text-emerald-700"
                           : isNegative
@@ -196,7 +196,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
       <p className="text-sm font-medium text-muted">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-ink">
+      <p className="amount-text mt-2 text-3xl font-semibold text-ink">
         {currencyFormatter.format(value)}
       </p>
     </div>

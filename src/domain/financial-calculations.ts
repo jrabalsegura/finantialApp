@@ -1,3 +1,5 @@
+import { normalizeMoney } from "./money";
+
 export type MoneyValue =
   | number
   | string
@@ -162,18 +164,18 @@ const PENDING_REIMBURSEMENT_STATUSES = new Set<ReimbursementStatus>([
 
 export function toMoneyNumber(value: MoneyValue): number {
   if (typeof value === "number") {
-    return value;
+    return normalizeMoney(value);
   }
 
   if (typeof value === "string") {
-    return Number(value);
+    return normalizeMoney(Number(value));
   }
 
   if ("toNumber" in value) {
-    return value.toNumber();
+    return normalizeMoney(value.toNumber());
   }
 
-  return Number(value.toString());
+  return normalizeMoney(Number(value.toString()));
 }
 
 export function getDefaultTransactionImpact(
@@ -393,5 +395,5 @@ function sumMoney(values: MoneyValue[]): number {
 }
 
 function roundMoney(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  return normalizeMoney(value);
 }

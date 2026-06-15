@@ -13,6 +13,7 @@ import {
 } from "./actions";
 import { getNextScheduledDate } from "@/domain/recurring-transactions";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { formatPlainAmount } from "@/domain/money";
 import {
   RECURRING_OCCURRENCE_STATUS_LABELS,
   RECURRING_TRANSACTION_TYPE_LABELS
@@ -35,6 +36,30 @@ const weekdayLabels = [
   "viernes",
   "sábado",
   "domingo"
+];
+
+type RecurringGroupKey = "income" | "expense" | "transfer";
+
+const recurringTypeGroups: Array<{
+  key: RecurringGroupKey;
+  title: string;
+  description: string;
+}> = [
+  {
+    key: "income",
+    title: "Ingresos",
+    description: "Entradas recurrentes previstas."
+  },
+  {
+    key: "expense",
+    title: "Gastos",
+    description: "Salidas recurrentes de gasto."
+  },
+  {
+    key: "transfer",
+    title: "Transferencias y ahorro",
+    description: "Movimientos entre cuentas y asignaciones a partidas."
+  }
 ];
 
 export default async function RecurringPage() {
@@ -104,11 +129,23 @@ export default async function RecurringPage() {
     defaultAccountId: defaultAccount?.id ?? "",
     savingsBuckets
   };
+  const occurrenceGroups = recurringTypeGroups.map((group) => ({
+    ...group,
+    items: occurrences.filter((occurrence) =>
+      belongsToRecurringGroup(occurrence.recurringTransaction.type, group.key)
+    )
+  }));
+  const templateGroups = recurringTypeGroups.map((group) => ({
+    ...group,
+    items: templates.filter((template) =>
+      belongsToRecurringGroup(template.type, group.key)
+    )
+  }));
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-6xl gap-6">
-        <header className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Movimientos fijos
@@ -121,14 +158,6 @@ export default async function RecurringPage() {
               saldos e informes.
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Dashboard
-            </Link>
-            <Link className="nav-link" href="/monthly-close">
-              Cierre
-            </Link>
-          </nav>
         </header>
 
         <section className="rounded-lg border border-line bg-white shadow-sm">
@@ -156,120 +185,146 @@ export default async function RecurringPage() {
           </div>
 
           {occurrences.length > 0 ? (
-            <ul className="divide-y divide-line">
-              {occurrences.map((occurrence) => {
-                const template = occurrence.recurringTransaction;
-                const amount = toMoneyNumber(occurrence.amount);
+            <div className="grid gap-4 p-4 sm:p-5">
+              {occurrenceGroups.map((group) =>
+                group.items.length > 0 ? (
+                  <section
+                    className="overflow-hidden rounded-lg border border-line"
+                    key={group.key}
+                  >
+                    <GroupedListHeader
+                      count={group.items.length}
+                      description={group.description}
+                      title={group.title}
+                    />
+                    <ul className="divide-y divide-line">
+                      {group.items.map((occurrence) => {
+                        const template = occurrence.recurringTransaction;
+                        const amount = toMoneyNumber(occurrence.amount);
 
-                return (
-                  <li className="grid gap-4 px-4 py-5 sm:px-5" key={occurrence.id}>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-start">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-ink">
-                            {template.name}
-                          </h3>
-                          <StatusBadge status={occurrence.status} />
-                          <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                            {RECURRING_TRANSACTION_TYPE_LABELS[template.type]}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-muted">
-                          {formatRoute(template)} ·{" "}
-                          {dateFormatter.format(occurrence.scheduledDate)}
-                        </p>
-                        {template.category ? (
-                          <p className="mt-1 text-xs text-muted">
-                            Categoría: {template.category.name}
-                          </p>
-                        ) : null}
-                      </div>
-                      <p className="text-xl font-semibold text-ink">
-                        {currencyFormatter.format(amount)}
-                      </p>
-                    </div>
-
-                    {occurrence.status === "pending" ? (
-                      <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto]">
-                        <form action={confirmOccurrence}>
-                          <input
-                            name="occurrenceId"
-                            type="hidden"
-                            value={occurrence.id}
-                          />
-                          <button
-                            className="primary-button min-h-12 w-full"
-                            type="submit"
+                        return (
+                          <li
+                            className="grid gap-4 px-4 py-5 sm:px-5"
+                            key={occurrence.id}
                           >
-                            Confirmar
-                          </button>
-                        </form>
+                            <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h3 className="break-words font-semibold text-ink">
+                                    {template.name}
+                                  </h3>
+                                  <StatusBadge status={occurrence.status} />
+                                  <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
+                                    {
+                                      RECURRING_TRANSACTION_TYPE_LABELS[
+                                        template.type
+                                      ]
+                                    }
+                                  </span>
+                                </div>
+                                <p className="mt-1 break-words text-sm text-muted">
+                                  {formatRoute(template)} ·{" "}
+                                  {dateFormatter.format(
+                                    occurrence.scheduledDate
+                                  )}
+                                </p>
+                                {template.category ? (
+                                  <p className="mt-1 break-words text-xs text-muted">
+                                    Categoría: {template.category.name}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <p className="amount-text text-xl font-semibold text-ink sm:text-right">
+                                {currencyFormatter.format(amount)}
+                              </p>
+                            </div>
 
-                        <details className="rounded-lg border border-line bg-surface p-3">
-                          <summary className="cursor-pointer text-sm font-semibold text-ink">
-                            Editar importe o fecha y confirmar
-                          </summary>
-                          <form
-                            action={editAndConfirmOccurrence}
-                            className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
-                          >
-                            <input
-                              name="occurrenceId"
-                              type="hidden"
-                              value={occurrence.id}
-                            />
-                            <label className="field-label">
-                              Importe
-                              <input
-                                className="field-input"
-                                defaultValue={amount}
-                                min="0.01"
-                                name="amount"
-                                required
-                                step="0.01"
-                                type="number"
-                              />
-                            </label>
-                            <label className="field-label">
-                              Fecha
-                              <input
-                                className="field-input"
-                                defaultValue={formatDateInputValue(
-                                  occurrence.scheduledDate
-                                )}
-                                name="date"
-                                required
-                                type="date"
-                              />
-                            </label>
-                            <button
-                              className="primary-button min-h-12 self-end"
-                              type="submit"
-                            >
-                              Guardar y confirmar
-                            </button>
-                          </form>
-                        </details>
+                            {occurrence.status === "pending" ? (
+                              <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto]">
+                                <form action={confirmOccurrence}>
+                                  <input
+                                    name="occurrenceId"
+                                    type="hidden"
+                                    value={occurrence.id}
+                                  />
+                                  <button
+                                    className="primary-button min-h-12 w-full"
+                                    type="submit"
+                                  >
+                                    Confirmar
+                                  </button>
+                                </form>
 
-                        <form action={skipOccurrence}>
-                          <input
-                            name="occurrenceId"
-                            type="hidden"
-                            value={occurrence.id}
-                          />
-                          <ConfirmSubmitButton
-                            className="danger-button min-h-12 w-full"
-                            confirmMessage={`¿Omitir "${template.name}" en esta fecha?`}
-                          >
-                            Omitir
-                          </ConfirmSubmitButton>
-                        </form>
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+                                <details className="rounded-lg border border-line bg-surface p-3">
+                                  <summary className="cursor-pointer text-sm font-semibold text-ink">
+                                    Editar importe o fecha y confirmar
+                                  </summary>
+                                  <form
+                                    action={editAndConfirmOccurrence}
+                                    className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]"
+                                  >
+                                    <input
+                                      name="occurrenceId"
+                                      type="hidden"
+                                      value={occurrence.id}
+                                    />
+                                    <label className="field-label">
+                                      Importe
+                                      <input
+                                        className="field-input"
+                                        defaultValue={formatPlainAmount(amount)}
+                                        inputMode="decimal"
+                                        min="0.01"
+                                        name="amount"
+                                        required
+                                        step="0.01"
+                                        type="number"
+                                      />
+                                    </label>
+                                    <label className="field-label">
+                                      Fecha
+                                      <input
+                                        className="field-input"
+                                        defaultValue={formatDateInputValue(
+                                          occurrence.scheduledDate
+                                        )}
+                                        name="date"
+                                        required
+                                        type="date"
+                                      />
+                                    </label>
+                                    <button
+                                      className="primary-button min-h-12 self-end"
+                                      type="submit"
+                                    >
+                                      Guardar y confirmar
+                                    </button>
+                                  </form>
+                                </details>
+
+                                <form action={skipOccurrence}>
+                                  <input
+                                    name="occurrenceId"
+                                    type="hidden"
+                                    value={occurrence.id}
+                                  />
+                                  <ConfirmSubmitButton
+                                    className="danger-button min-h-12 w-full"
+                                    confirmMessage={`¿Omitir "${template.name}" en esta fecha?`}
+                                  >
+                                    Omitir
+                                  </ConfirmSubmitButton>
+                                </form>
+                              </div>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ) : null
+              )}
+            </div>
           ) : (
             <div className="px-4 py-8 text-sm text-muted sm:px-5">
               No hay ocurrencias recurrentes para este mes.
@@ -286,113 +341,167 @@ export default async function RecurringPage() {
           </div>
 
           {templates.length > 0 ? (
-            <ul className="divide-y divide-line">
-              {templates.map((template) => {
-                const nextDate = template.isActive
-                  ? getNextScheduledDate(template, today)
-                  : null;
-                const occurrenceSummary = summarizeOccurrenceStatuses(
-                  template.occurrences
-                );
+            <div className="grid gap-4 p-4 sm:p-5">
+              {templateGroups.map((group) =>
+                group.items.length > 0 ? (
+                  <section
+                    className="overflow-hidden rounded-lg border border-line"
+                    key={group.key}
+                  >
+                    <GroupedListHeader
+                      count={group.items.length}
+                      description={group.description}
+                      title={group.title}
+                    />
+                    <ul className="divide-y divide-line">
+                      {group.items.map((template) => {
+                        const nextDate = template.isActive
+                          ? getNextScheduledDate(template, today)
+                          : null;
+                        const occurrenceSummary =
+                          summarizeOccurrenceStatuses(template.occurrences);
 
-                return (
-                  <li className="grid gap-4 px-4 py-5 sm:px-5" key={template.id}>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-ink">
-                            {template.name}
-                          </h3>
-                          <span
-                            className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                              template.isActive
-                                ? "bg-emerald-50 text-emerald-800"
-                                : "bg-surface text-muted"
-                            }`}
+                        return (
+                          <li
+                            className="grid gap-4 px-4 py-5 sm:px-5"
+                            key={template.id}
                           >
-                            {template.isActive ? "Activa" : "Inactiva"}
-                          </span>
-                          <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
-                            {template.autoCreateMode === "pending"
-                              ? "Revisión manual"
-                              : "Automática"}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-muted">
-                          {RECURRING_TRANSACTION_TYPE_LABELS[template.type]} ·{" "}
-                          {formatFrequency(template)} ·{" "}
-                          {currencyFormatter.format(toMoneyNumber(template.amount))}
-                        </p>
-                        <p className="mt-1 text-xs text-muted">
-                          Próxima fecha:{" "}
-                          {nextDate ? dateFormatter.format(nextDate) : "Sin próxima fecha"}
-                          {" · "}
-                          Mes actual:{" "}
-                          {template.occurrences.length > 0
-                            ? occurrenceSummary
-                            : "No generado"}
-                        </p>
-                      </div>
-                      <form action={toggleRecurringTransaction}>
-                        <input name="id" type="hidden" value={template.id} />
-                        <input
-                          name="isActive"
-                          type="hidden"
-                          value={String(!template.isActive)}
-                        />
-                        <button className="nav-link w-full" type="submit">
-                          {template.isActive ? "Desactivar" : "Activar"}
-                        </button>
-                      </form>
-                    </div>
+                            <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h3 className="break-words font-semibold text-ink">
+                                    {template.name}
+                                  </h3>
+                                  <span
+                                    className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                                      template.isActive
+                                        ? "bg-emerald-50 text-emerald-800"
+                                        : "bg-surface text-muted"
+                                    }`}
+                                  >
+                                    {template.isActive
+                                      ? "Activa"
+                                      : "Inactiva"}
+                                  </span>
+                                  <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
+                                    {template.autoCreateMode === "pending"
+                                      ? "Revisión manual"
+                                      : "Automática"}
+                                  </span>
+                                </div>
+                                <p className="amount-text mt-1 text-sm text-muted">
+                                  {
+                                    RECURRING_TRANSACTION_TYPE_LABELS[
+                                      template.type
+                                    ]
+                                  }{" "}
+                                  · {formatFrequency(template)} ·{" "}
+                                  {currencyFormatter.format(
+                                    toMoneyNumber(template.amount)
+                                  )}
+                                </p>
+                                <p className="mt-1 break-words text-xs text-muted">
+                                  Próxima fecha:{" "}
+                                  {nextDate
+                                    ? dateFormatter.format(nextDate)
+                                    : "Sin próxima fecha"}
+                                  {" · "}
+                                  Mes actual:{" "}
+                                  {template.occurrences.length > 0
+                                    ? occurrenceSummary
+                                    : "No generado"}
+                                </p>
+                              </div>
+                              <form action={toggleRecurringTransaction}>
+                                <input
+                                  name="id"
+                                  type="hidden"
+                                  value={template.id}
+                                />
+                                <input
+                                  name="isActive"
+                                  type="hidden"
+                                  value={String(!template.isActive)}
+                                />
+                                <button
+                                  className="nav-link w-full"
+                                  type="submit"
+                                >
+                                  {template.isActive
+                                    ? "Desactivar"
+                                    : "Activar"}
+                                </button>
+                              </form>
+                            </div>
 
-                    <details className="rounded-lg border border-line bg-surface p-3">
-                      <summary className="cursor-pointer text-sm font-semibold text-ink">
-                        Editar configuración
-                      </summary>
-                      <form action={updateRecurringTransaction} className="mt-4 grid gap-4">
-                        <input name="id" type="hidden" value={template.id} />
-                        <RecurringTransactionFields
-                          {...formOptions}
-                          template={{
-                            accountId: template.accountId,
-                            amount: toMoneyNumber(template.amount),
-                            autoCreateMode: template.autoCreateMode,
-                            categoryId: template.categoryId,
-                            dayOfMonth: template.dayOfMonth,
-                            dayOfWeek: template.dayOfWeek,
-                            description: template.description,
-                            destinationAccountId: template.destinationAccountId,
-                            endDate: template.endDate
-                              ? formatDateInputValue(template.endDate)
-                              : "",
-                            frequency: template.frequency,
-                            isActive: template.isActive,
-                            name: template.name,
-                            savingsBucketId: template.savingsBucketId,
-                            startDate: formatDateInputValue(template.startDate),
-                            type: template.type
-                          }}
-                        />
-                        <button className="primary-button" type="submit">
-                          Guardar cambios
-                        </button>
-                      </form>
-                    </details>
+                            <details className="rounded-lg border border-line bg-surface p-3">
+                              <summary className="cursor-pointer text-sm font-semibold text-ink">
+                                Editar configuración
+                              </summary>
+                              <form
+                                action={updateRecurringTransaction}
+                                className="mt-4 grid gap-4"
+                              >
+                                <input
+                                  name="id"
+                                  type="hidden"
+                                  value={template.id}
+                                />
+                                <RecurringTransactionFields
+                                  {...formOptions}
+                                  template={{
+                                    accountId: template.accountId,
+                                    amount: toMoneyNumber(template.amount),
+                                    autoCreateMode: template.autoCreateMode,
+                                    categoryId: template.categoryId,
+                                    dayOfMonth: template.dayOfMonth,
+                                    dayOfWeek: template.dayOfWeek,
+                                    description: template.description,
+                                    destinationAccountId:
+                                      template.destinationAccountId,
+                                    endDate: template.endDate
+                                      ? formatDateInputValue(template.endDate)
+                                      : "",
+                                    frequency: template.frequency,
+                                    isActive: template.isActive,
+                                    name: template.name,
+                                    savingsBucketId: template.savingsBucketId,
+                                    startDate: formatDateInputValue(
+                                      template.startDate
+                                    ),
+                                    type: template.type
+                                  }}
+                                />
+                                <button
+                                  className="primary-button"
+                                  type="submit"
+                                >
+                                  Guardar cambios
+                                </button>
+                              </form>
+                            </details>
 
-                    <form action={deleteRecurringTransaction}>
-                      <input name="id" type="hidden" value={template.id} />
-                      <ConfirmSubmitButton
-                        className="danger-button"
-                        confirmMessage={`¿Eliminar la plantilla "${template.name}"? Los movimientos reales ya confirmados se conservarán.`}
-                      >
-                        Eliminar plantilla
-                      </ConfirmSubmitButton>
-                    </form>
-                  </li>
-                );
-              })}
-            </ul>
+                            <form action={deleteRecurringTransaction}>
+                              <input
+                                name="id"
+                                type="hidden"
+                                value={template.id}
+                              />
+                              <ConfirmSubmitButton
+                                className="danger-button"
+                                confirmMessage={`¿Eliminar la plantilla "${template.name}"? Los movimientos reales ya confirmados se conservarán.`}
+                              >
+                                Eliminar plantilla
+                              </ConfirmSubmitButton>
+                            </form>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ) : null
+              )}
+            </div>
           ) : (
             <div className="px-4 py-8 text-sm text-muted sm:px-5">
               Todavía no hay movimientos fijos configurados.
@@ -460,6 +569,45 @@ function StatusBadge({
       {RECURRING_OCCURRENCE_STATUS_LABELS[status]}
     </span>
   );
+}
+
+function GroupedListHeader({
+  count,
+  description,
+  title
+}: {
+  count: number;
+  description: string;
+  title: string;
+}) {
+  return (
+    <div className="grid gap-2 border-b border-line bg-surface px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-accent">
+          {title}
+        </h3>
+        <p className="mt-1 text-xs text-muted">{description}</p>
+      </div>
+      <span className="w-fit rounded-full bg-white px-2 py-1 text-xs font-semibold text-muted">
+        {count} {count === 1 ? "elemento" : "elementos"}
+      </span>
+    </div>
+  );
+}
+
+function belongsToRecurringGroup(
+  type: "expense" | "income" | "transfer" | "savings_allocation",
+  group: RecurringGroupKey
+): boolean {
+  if (group === "income") {
+    return type === "income";
+  }
+
+  if (group === "expense") {
+    return type === "expense";
+  }
+
+  return type === "transfer" || type === "savings_allocation";
 }
 
 function formatRoute(template: {

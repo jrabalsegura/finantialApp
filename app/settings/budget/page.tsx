@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { formatPlainAmount } from "@/domain/money";
 import { getOrCreateBudgetSetting } from "@/lib/weekly-budget";
 import { prisma } from "@/lib/prisma";
 import { updateBudgetSetting } from "./actions";
@@ -18,7 +18,7 @@ export default async function BudgetSettingsPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-3xl gap-6">
-        <header className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Configuración
@@ -31,17 +31,6 @@ export default async function BudgetSettingsPage() {
               calcular tu gasto variable.
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/">
-              Dashboard
-            </Link>
-            <Link className="nav-link" href="/weekly-budget">
-              Ver detalle
-            </Link>
-            <Link className="nav-link" href="/settings/backup">
-              Backup
-            </Link>
-          </nav>
         </header>
 
         <form
@@ -53,9 +42,10 @@ export default async function BudgetSettingsPage() {
               Ahorro mínimo mensual
               <input
                 className="field-input"
-                defaultValue={toMoneyNumber(
-                  setting.monthlyMinimumSavingsTarget
+                defaultValue={formatPlainAmount(
+                  toMoneyNumber(setting.monthlyMinimumSavingsTarget)
                 )}
+                inputMode="decimal"
                 min="0"
                 name="monthlyMinimumSavingsTarget"
                 required

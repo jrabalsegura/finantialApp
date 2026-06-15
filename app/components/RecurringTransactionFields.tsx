@@ -6,6 +6,7 @@ import type {
   RecurringTransactionType
 } from "@prisma/client";
 import { RECURRING_TRANSACTION_TYPE_OPTIONS } from "@/domain/domain-options";
+import { formatPlainAmount } from "@/domain/money";
 
 type AccountOption = {
   id: string;
@@ -119,8 +120,11 @@ export function RecurringTransactionFields({
           <input
             className="field-input"
             defaultValue={
-              template && template.amount > 0 ? template.amount : undefined
+              template && template.amount > 0
+                ? formatPlainAmount(template.amount)
+                : undefined
             }
+            inputMode="decimal"
             min="0.01"
             name="amount"
             required

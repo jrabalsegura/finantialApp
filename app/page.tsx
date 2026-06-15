@@ -52,7 +52,7 @@ export default async function Home() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
       <div className="mx-auto grid w-full max-w-7xl gap-6">
-        <header className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+        <header className="grid gap-3">
           <div className="grid gap-2">
             <p className="text-sm font-semibold uppercase tracking-wide text-accent">
               Dashboard
@@ -64,32 +64,6 @@ export default async function Home() {
               {capitalize(monthFormatter.format(today))}
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="nav-link" href="/accounts">
-              Cuentas
-            </Link>
-            <Link className="nav-link" href="/savings">
-              Partidas
-            </Link>
-            <Link className="nav-link" href="/reimbursements">
-              Pendientes
-            </Link>
-            <Link className="nav-link" href="/recurring">
-              Fijos
-            </Link>
-            <Link className="nav-link" href="/quick-templates">
-              Accesos rápidos
-            </Link>
-            <Link className="nav-link" href="/monthly-close">
-              Cierre
-            </Link>
-            <Link className="nav-link" href="/history">
-              Histórico
-            </Link>
-            <Link className="nav-link" href="/settings/budget">
-              Configuración
-            </Link>
-          </nav>
         </header>
 
         <WeeklyBudgetCard status={weeklyBudgetReport.status} />
@@ -115,7 +89,7 @@ export default async function Home() {
                 <ul className="divide-y divide-line">
                   {pendingRecurringOccurrences.slice(0, 3).map((occurrence) => (
                     <li
-                      className="grid gap-1 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                      className="grid min-w-0 gap-1 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
                       key={occurrence.id}
                     >
                       <div>
@@ -133,7 +107,7 @@ export default async function Home() {
                           {dateFormatter.format(occurrence.scheduledDate)}
                         </p>
                       </div>
-                      <p className="text-sm font-semibold text-ink">
+                      <p className="amount-text text-sm font-semibold text-ink sm:text-right">
                         {currencyFormatter.format(
                           toMoneyNumber(occurrence.amount)
                         )}
@@ -294,7 +268,7 @@ export default async function Home() {
 
                 return (
                   <li
-                    className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                    className="grid min-w-0 gap-2 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"
                     key={transaction.id}
                   >
                     <div className="grid gap-1">
@@ -315,7 +289,7 @@ export default async function Home() {
                     </div>
 
                     <p
-                      className={`text-lg font-semibold ${
+                      className={`amount-text text-lg font-semibold sm:text-right ${
                         isOutflow
                           ? "text-rose-700"
                           : isInflow

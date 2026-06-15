@@ -1,7 +1,20 @@
-export const currencyFormatter = new Intl.NumberFormat("es-ES", {
+import { normalizeMoney } from "@/domain/money";
+
+const eurCurrencyFormatter = new Intl.NumberFormat("es-ES", {
   style: "currency",
-  currency: "EUR"
+  currency: "EUR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: true
 });
+
+export function formatCurrencyEUR(value: number): string {
+  return eurCurrencyFormatter.format(normalizeMoney(value));
+}
+
+export const currencyFormatter = {
+  format: formatCurrencyEUR
+};
 
 export const shortDateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",

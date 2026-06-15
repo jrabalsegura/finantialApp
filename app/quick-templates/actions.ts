@@ -8,6 +8,7 @@ import {
   type QuickTemplateInput
 } from "@/lib/quick-transaction-templates";
 import { QUICK_TRANSACTION_TYPES } from "@/domain/domain-options";
+import { parseMoneyInput } from "@/domain/money";
 import { prisma } from "@/lib/prisma";
 
 const VALID_TYPES = new Set<QuickTransactionTemplateType>(
@@ -143,7 +144,7 @@ function parseType(
 
 function parseOptionalAmount(value: FormDataEntryValue | null): number | null {
   if (typeof value !== "string" || value.trim() === "") return null;
-  const amount = Number(value.replace(",", "."));
+  const amount = parseMoneyInput(value);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("El importe por defecto debe ser mayor que cero.");
   }

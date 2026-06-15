@@ -22,6 +22,7 @@ import {
   getReimbursementTransactionRules,
   type QuickTransactionType
 } from "@/domain/transaction-rules";
+import { normalizeMoney, parseMoneyInput } from "@/domain/money";
 import { createTransactionFromDraft } from "@/lib/transactions";
 
 export type TransactionFormState = {
@@ -1101,7 +1102,7 @@ function validateAdjustmentDirection(
 }
 
 function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+  return normalizeMoney(value);
 }
 
 function parseTransactionType(value: FormDataEntryValue | null): QuickTransactionType {
@@ -1120,8 +1121,7 @@ function parseAmount(value: FormDataEntryValue | null): number {
     throw new Error("Introduce un importe.");
   }
 
-  const normalizedValue = value.replace(",", ".").trim();
-  const amount = Number(normalizedValue);
+  const amount = parseMoneyInput(value);
 
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("El importe debe ser mayor que cero.");
@@ -1135,8 +1135,7 @@ function parseAmountAllowingZero(value: FormDataEntryValue | null): number {
     return 0;
   }
 
-  const normalizedValue = value.replace(",", ".").trim();
-  const amount = Number(normalizedValue);
+  const amount = parseMoneyInput(value);
 
   if (!Number.isFinite(amount)) {
     throw new Error("El importe debe ser un número válido.");
