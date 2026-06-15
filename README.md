@@ -145,11 +145,14 @@ La Fase 12 añade plantillas de movimientos rápidos:
 - `src/domain`: reglas financieras puras, cálculos y opciones tipadas del dominio.
 - `src/lib`: acceso a Prisma, servicios de aplicación y formateadores compartidos.
 - `app/components`: formularios y componentes reutilizados por las rutas.
+- `app/components/dashboard`: paneles visuales específicos del dashboard.
 - `app/**/actions.ts`: acciones de servidor y validación de entradas.
 
 Las etiquetas y valores permitidos de cuentas, movimientos rápidos, recurrentes
 y reembolsos se centralizan en `src/domain/domain-options.ts`. El formato de
-euros y fechas se centraliza en `src/lib/formatters.ts`.
+euros y fechas se centraliza en `src/lib/formatters.ts`. La carga y preparación
+del dashboard se concentra en `src/lib/dashboard.ts`, con sus agregaciones puras
+en `src/domain/dashboard.ts`.
 
 ## Datos iniciales
 
