@@ -74,6 +74,13 @@ La Fase 12 añade plantillas de movimientos rápidos:
   cobros de reembolso y asignaciones a ahorro.
 - Las plantillas no afectan a saldos ni informes hasta confirmar.
 
+La app incluye autenticación básica para uso privado:
+
+- Si no hay usuarios, el primer acceso a `/login` permite crear el primero.
+- Las contraseñas se guardan hasheadas en la base de datos.
+- La sesión se conserva durante aproximadamente 1 hora.
+- `/settings/security` permite cambiar la contraseña y crear usuarios nuevos.
+
 ## Requisitos
 
 - Node.js 20 o superior.
@@ -97,7 +104,11 @@ La Fase 12 añade plantillas de movimientos rápidos:
 
    ```bash
    DATABASE_URL="file:./dev.db"
+   AUTH_SECRET="change-me-before-publishing"
    ```
+
+   Cambia `AUTH_SECRET` por un valor largo y aleatorio antes de publicar la app
+   en una URL accesible desde internet.
 
 3. Aplica la migración y genera Prisma Client:
 
@@ -128,6 +139,7 @@ La Fase 12 añade plantillas de movimientos rápidos:
 - `/quick-templates`: gestión de plantillas y accesos rápidos.
 - `/monthly-close`: asistente de cierre mensual.
 - `/history`: histórico mensual y acceso al detalle de cada cierre.
+- `/settings/security`: usuarios, contraseña y sesión.
 
 ## Scripts útiles
 

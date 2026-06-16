@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { logoutUser } from "../login/actions";
 
 const primaryItems = [
   { href: "/", label: "Dashboard" },
@@ -16,6 +17,7 @@ const secondaryItems = [
   { href: "/recurring", label: "Fijos" },
   { href: "/quick-templates", label: "Accesos rápidos" },
   { href: "/history", label: "Histórico" },
+  { href: "/settings/security", label: "Seguridad" },
   { href: "/settings/budget", label: "Objetivo semanal" },
   { href: "/settings/backup", label: "Backup" }
 ];
@@ -59,6 +61,10 @@ export function AppNavbar() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isMoreOpen]);
+
+  if (pathname.startsWith("/login")) {
+    return null;
+  }
 
   return (
     <header className="app-navbar">
@@ -104,6 +110,11 @@ export function AppNavbar() {
                   onClick={() => setIsMoreOpen(false)}
                 />
               ))}
+              <form action={logoutUser}>
+                <button className="app-nav-item logout-button" type="submit">
+                  Cerrar sesión
+                </button>
+              </form>
             </nav>
           ) : null}
         </div>

@@ -255,6 +255,24 @@ a {
   width: 100%;
 }
 
+.more-menu form {
+  margin: 0;
+}
+
+.more-menu .logout-button {
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #5d666b;
+  cursor: pointer;
+}
+
+.more-menu .logout-button:hover {
+  background: #ffffff;
+  color: #172026;
+}
+
 .amount-text {
   min-width: 0;
   max-width: 100%;
