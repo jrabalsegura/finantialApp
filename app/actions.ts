@@ -729,6 +729,9 @@ export async function closeMonth(
         throw new Error("No hay cuenta disponible para registrar el reparto.");
       }
 
+      const manualSavingsBuckets = savingsBuckets.filter(
+        (bucket) => !bucket.isLongTerm
+      );
       const accountSnapshots: Array<{
         accountId: string;
         adjustmentTransactionId?: string;
@@ -844,13 +847,13 @@ export async function closeMonth(
         year,
         month
       );
-      const savingsAllocations = savingsBuckets.map((bucket) => ({
+      const savingsAllocations = manualSavingsBuckets.map((bucket) => ({
         bucketId: bucket.id,
         amount: parseAmountAllowingZero(
           formData.get(`savingsAllocation_${bucket.id}`)
         )
       }));
-      const savingsReductions = savingsBuckets.map((bucket) => ({
+      const savingsReductions = manualSavingsBuckets.map((bucket) => ({
         bucketId: bucket.id,
         amount: parseAmountAllowingZero(
           formData.get(`savingsReduction_${bucket.id}`)
@@ -869,7 +872,7 @@ export async function closeMonth(
       validateNegativeBucketReductions(
         savingsReductions,
         monthlySavings,
-        savingsBuckets.map((bucket) => ({
+        manualSavingsBuckets.map((bucket) => ({
           currentAmount: bucket.currentAmount,
           id: bucket.id
         }))

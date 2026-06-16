@@ -126,6 +126,7 @@ export function MonthlyCloseForm({
   );
   const closeResult = getMonthlyCloseResult(estimatedMonthlySavings);
   const longTermBucket = buckets.find((bucket) => bucket.isLongTerm) ?? null;
+  const manualBuckets = buckets.filter((bucket) => !bucket.isLongTerm);
   const longTermBucketAdjustment = calculateLongTermBucketAdjustment(
     accountRows.map((account) => ({
       difference: account.difference,
@@ -135,7 +136,7 @@ export function MonthlyCloseForm({
     }))
   );
   const allocationTotal = roundMoney(
-    buckets.reduce(
+    manualBuckets.reduce(
       (total, bucket) => total + parseInputAmount(allocations[bucket.id]),
       0
     )
@@ -144,7 +145,7 @@ export function MonthlyCloseForm({
     closeResult.surplus - allocationTotal
   );
   const reductionTotal = roundMoney(
-    buckets.reduce(
+    manualBuckets.reduce(
       (total, bucket) => total + parseInputAmount(reductions[bucket.id]),
       0
     )
@@ -153,9 +154,9 @@ export function MonthlyCloseForm({
     closeResult.deficit - reductionTotal
   );
   const totalAvailableInBuckets = roundMoney(
-    buckets.reduce((total, bucket) => total + bucket.currentAmount, 0)
+    manualBuckets.reduce((total, bucket) => total + bucket.currentAmount, 0)
   );
-  const hasReductionOverBalance = buckets.some(
+  const hasReductionOverBalance = manualBuckets.some(
     (bucket) => parseInputAmount(reductions[bucket.id]) > bucket.currentAmount
   );
   const hasInvalidAdjustment = accountRows.some(
@@ -371,22 +372,15 @@ export function MonthlyCloseForm({
             projectedAmount={projectedLongTermBucketBalance}
           />
         ) : null}
-        {buckets.length > 0 && closeResult.kind === "positive" ? (
+        {manualBuckets.length > 0 && closeResult.kind === "positive" ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {buckets.map((bucket) => {
+              {manualBuckets.map((bucket) => {
                 const allocationAmount = parseInputAmount(
                   allocations[bucket.id]
                 );
-                const automaticAdjustment =
-                  bucket.id === longTermBucket?.id
-                    ? longTermBucketAdjustment
-                    : 0;
                 const projectedProgress = getBucketGoalProgress({
-                  currentAmount:
-                    bucket.currentAmount +
-                    allocationAmount +
-                    automaticAdjustment,
+                  currentAmount: bucket.currentAmount + allocationAmount,
                   targetAmount: bucket.targetAmount
                 });
 
@@ -455,7 +449,7 @@ export function MonthlyCloseForm({
               </p>
             ) : null}
           </div>
-        ) : buckets.length > 0 && closeResult.kind === "negative" ? (
+        ) : manualBuckets.length > 0 && closeResult.kind === "negative" ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
               <p className="font-semibold">
@@ -469,14 +463,10 @@ export function MonthlyCloseForm({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {buckets.map((bucket) => {
+              {manualBuckets.map((bucket) => {
                 const reductionAmount = parseInputAmount(reductions[bucket.id]);
-                const automaticAdjustment =
-                  bucket.id === longTermBucket?.id
-                    ? longTermBucketAdjustment
-                    : 0;
                 const finalAmount = roundMoney(
-                  bucket.currentAmount - reductionAmount + automaticAdjustment
+                  bucket.currentAmount - reductionAmount
                 );
                 const currentProgress = getBucketGoalProgress({
                   currentAmount: bucket.currentAmount,
@@ -574,7 +564,7 @@ export function MonthlyCloseForm({
           </div>
         ) : (
           <div className="px-4 py-8 text-sm text-muted sm:px-5">
-            No hay partidas de ahorro disponibles para este cierre.
+            No hay partidas de ahorro manuales disponibles para este cierre.
           </div>
         )}
       </section>
