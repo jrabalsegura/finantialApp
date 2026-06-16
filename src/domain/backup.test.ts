@@ -69,6 +69,7 @@ function createValidBackup(): FinancialBackup {
           destinationAccountId: null,
           categoryId: "category-1",
           savingsBucketId: null,
+          monthlyCloseId: "close-1",
           affectsRealBalance: true,
           affectsPersonalExpense: true,
           affectsPersonalIncome: false,

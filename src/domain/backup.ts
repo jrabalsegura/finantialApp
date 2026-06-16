@@ -115,6 +115,7 @@ export type BackupTransaction = TimestampedRecord & {
   destinationAccountId: string | null;
   categoryId: string | null;
   savingsBucketId: string | null;
+  monthlyCloseId?: string | null;
   affectsRealBalance: boolean;
   affectsPersonalExpense: boolean;
   affectsPersonalIncome: boolean;
@@ -468,6 +469,12 @@ function validateTransaction(value: unknown, path: string, errors: string[]) {
     value.savingsBucketId,
     `${path}.savingsBucketId`,
     errors
+  );
+  validateOptionalString(
+    value.monthlyCloseId,
+    `${path}.monthlyCloseId`,
+    errors,
+    true
   );
   validateBoolean(
     value.affectsRealBalance,
@@ -877,6 +884,12 @@ function validateUniquenessAndRelations(
       reimbursementIds,
       transaction.reimbursementId,
       `El movimiento ${transaction.id} referencia un reembolso inexistente.`,
+      errors
+    );
+    requireOptionalReference(
+      closeIds,
+      transaction.monthlyCloseId ?? null,
+      `El movimiento ${transaction.id} referencia un cierre mensual inexistente.`,
       errors
     );
   }

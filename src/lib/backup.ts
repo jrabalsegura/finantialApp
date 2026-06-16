@@ -184,8 +184,13 @@ export async function importBackup(input: unknown): Promise<void> {
         }))
       });
       await tx.transaction.createMany({
-        data: data.transactions.map(({ reimbursementId: _ignored, ...record }) => ({
+        data: data.transactions.map(({
+          monthlyCloseId: _ignoredClose,
+          reimbursementId: _ignored,
+          ...record
+        }) => ({
           ...record,
+          monthlyCloseId: null,
           reimbursementId: null,
           date: new Date(record.date),
           amount: record.amount,
@@ -257,6 +262,19 @@ export async function importBackup(input: unknown): Promise<void> {
           updatedAt: new Date(record.updatedAt)
         }))
       });
+
+      for (const transaction of data.transactions) {
+        if (transaction.monthlyCloseId) {
+          await tx.transaction.update({
+            where: { id: transaction.id },
+            data: {
+              monthlyCloseId: transaction.monthlyCloseId,
+              updatedAt: new Date(transaction.updatedAt)
+            }
+          });
+        }
+      }
+
       await tx.monthlyAccountSnapshot.createMany({
         data: data.monthlyAccountSnapshots
       });

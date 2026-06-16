@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { undoLatestMonthlyClose } from "../../actions";
+import { ConfirmSubmitButton } from "../../components/ConfirmSubmitButton";
 import {
   calculateNetWorthVariation,
   toMoneyNumber
@@ -57,23 +59,29 @@ export default async function MonthlyCloseDetailPage({
     notFound();
   }
 
-  const previousClose = await prisma.monthlyClose.findFirst({
-    where: {
-      OR: [
-        { year: { lt: close.year } },
-        {
-          year: close.year,
-          month: { lt: close.month }
-        }
-      ]
-    },
-    orderBy: [{ year: "desc" }, { month: "desc" }],
-    select: {
-      year: true,
-      month: true,
-      netWorth: true
-    }
-  });
+  const [previousClose, latestClose] = await Promise.all([
+    prisma.monthlyClose.findFirst({
+      where: {
+        OR: [
+          { year: { lt: close.year } },
+          {
+            year: close.year,
+            month: { lt: close.month }
+          }
+        ]
+      },
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      select: {
+        year: true,
+        month: true,
+        netWorth: true
+      }
+    }),
+    prisma.monthlyClose.findFirst({
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      select: { id: true }
+    })
+  ]);
 
   const variation = calculateNetWorthVariation(
     close.netWorth,
@@ -101,10 +109,21 @@ export default async function MonthlyCloseDetailPage({
                 : "Cierre guardado"}
             </p>
           </div>
-          <Link className="nav-link" href="/">
-            Dashboard
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
+            {latestClose?.id === close.id ? (
+              <UndoMonthlyCloseForm closeId={close.id} />
+            ) : null}
+            <Link className="nav-link" href="/">
+              Dashboard
+            </Link>
+          </div>
         </header>
+
+        {latestClose?.id !== close.id ? (
+          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 shadow-sm sm:p-5">
+            Solo se puede deshacer el último cierre mensual.
+          </section>
+        ) : null}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Ingresos" value={toMoneyNumber(close.totalIncome)} />
@@ -278,6 +297,21 @@ export default async function MonthlyCloseDetailPage({
         </section>
       </div>
     </main>
+  );
+}
+
+function UndoMonthlyCloseForm({ closeId }: { closeId: string }) {
+  return (
+    <form action={undoLatestMonthlyClose}>
+      <input name="closeId" type="hidden" value={closeId} />
+      <input name="returnTo" type="hidden" value="/history" />
+      <ConfirmSubmitButton
+        className="inline-flex min-h-11 items-center justify-center rounded-lg border border-rose-300 bg-rose-50 px-4 text-sm font-bold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+        confirmMessage="¿Deshacer el último cierre mensual? Se revertirán sus ajustes de cuenta y sus asignaciones o reducciones de partidas."
+      >
+        Deshacer cierre
+      </ConfirmSubmitButton>
+    </form>
   );
 }
 

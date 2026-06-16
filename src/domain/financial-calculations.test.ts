@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   calculateAvailableMoney,
   calculateAssignedSavings,
+  calculateLongTermBucketAdjustment,
   calculateNetWorth,
   calculateNetWorthVariation,
   calculatePendingReimbursements,
@@ -10,10 +11,17 @@ import {
   calculateRealMonthlyIncome,
   calculateRealMonthlySavings,
   calculateUnassignedAvailableMoney,
+  accountFeedsLongTermBucket,
+  applyBucketAllocations,
+  applyBucketReductions,
+  createMonthlyBucketSnapshots,
   getDefaultTransactionImpact,
+  getMonthlyCloseResult,
   isTransactionInMonth,
   transactionAffectsMonthlySavings,
   transactionAffectsNetWorth,
+  validateNegativeBucketReductions,
+  validatePositiveBucketAllocations,
   type AccountForCalculations,
   type ReimbursementForCalculations,
   type SavingsBucketForCalculations,
@@ -108,10 +116,233 @@ test("calcula dinero asignado y dinero disponible no asignado", () => {
   assert.equal(calculateUnassignedAvailableMoney(accounts, savingsBuckets), 750);
 });
 
+test("calcula el ajuste automatico de largo plazo por cuentas fuera del ahorro mensual", () => {
+  assert.equal(
+    accountFeedsLongTermBucket({
+      includeInMonthlySavings: false,
+      includeInNetWorth: true,
+      type: "investment"
+    }),
+    true
+  );
+  assert.equal(
+    accountFeedsLongTermBucket({
+      includeInMonthlySavings: true,
+      includeInNetWorth: true,
+      type: "investment"
+    }),
+    false
+  );
+  assert.equal(
+    calculateLongTermBucketAdjustment([
+      {
+        difference: 120,
+        includeInMonthlySavings: false,
+        includeInNetWorth: true,
+        type: "investment"
+      },
+      {
+        difference: -40,
+        includeInMonthlySavings: false,
+        includeInNetWorth: true,
+        type: "pension"
+      },
+      {
+        difference: 500,
+        includeInMonthlySavings: true,
+        includeInNetWorth: true,
+        type: "savings"
+      },
+      {
+        difference: 80,
+        includeInMonthlySavings: false,
+        includeInNetWorth: false,
+        type: "investment"
+      }
+    ]),
+    80
+  );
+});
+
 test("calcula ingresos, gastos y ahorro mensual real por flags y mes", () => {
   assert.equal(calculateRealMonthlyIncome(transactions, 2026, 6), 3000);
   assert.equal(calculateRealMonthlyExpense(transactions, 2026, 6), 130);
   assert.equal(calculateRealMonthlySavings(transactions, 2026, 6), 2870);
+});
+
+test("clasifica el resultado del cierre mensual", () => {
+  assert.deepEqual(getMonthlyCloseResult(400), {
+    deficit: 0,
+    kind: "positive",
+    monthlySavings: 400,
+    surplus: 400
+  });
+  assert.deepEqual(getMonthlyCloseResult(0), {
+    deficit: 0,
+    kind: "zero",
+    monthlySavings: 0,
+    surplus: 0
+  });
+  assert.deepEqual(getMonthlyCloseResult(-300), {
+    deficit: 300,
+    kind: "negative",
+    monthlySavings: -300,
+    surplus: 0
+  });
+});
+
+test("valida asignaciones positivas exactas sin dejar dinero pendiente", () => {
+  assert.deepEqual(
+    validatePositiveBucketAllocations(
+      [
+        { amount: 150, bucketId: "vacaciones" },
+        { amount: 50, bucketId: "reserva" }
+      ],
+      200
+    ),
+    {
+      pendingAmount: 0,
+      totalAmount: 200
+    }
+  );
+
+  assert.throws(
+    () =>
+      validatePositiveBucketAllocations(
+        [{ amount: 150, bucketId: "vacaciones" }],
+        200
+      ),
+    /debe quedar asignado/
+  );
+  assert.throws(
+    () =>
+      validatePositiveBucketAllocations(
+        [{ amount: 250, bucketId: "vacaciones" }],
+        200
+      ),
+    /no puede superar/
+  );
+  assert.throws(
+    () =>
+      validatePositiveBucketAllocations(
+        [{ amount: 1, bucketId: "vacaciones" }],
+        -200
+      ),
+    /no es positivo/
+  );
+});
+
+test("valida reducciones negativas exactas y sin saldos bajo cero", () => {
+  const buckets = [
+    { currentAmount: 1200, id: "vacaciones" },
+    { currentAmount: 5000, id: "reserva" }
+  ];
+
+  assert.deepEqual(
+    validateNegativeBucketReductions(
+      [
+        { amount: 100, bucketId: "vacaciones" },
+        { amount: 200, bucketId: "reserva" }
+      ],
+      -300,
+      buckets
+    ),
+    {
+      pendingAmount: 0,
+      totalAmount: 300
+    }
+  );
+
+  assert.throws(
+    () =>
+      validateNegativeBucketReductions(
+        [{ amount: 1300, bucketId: "vacaciones" }],
+        -300,
+        buckets
+      ),
+    /saldo actual/
+  );
+  assert.throws(
+    () =>
+      validateNegativeBucketReductions(
+        [{ amount: 100, bucketId: "vacaciones" }],
+        -300,
+        buckets
+      ),
+    /totalmente cubierto/
+  );
+  assert.throws(
+    () =>
+      validateNegativeBucketReductions(
+        [{ amount: 1, bucketId: "vacaciones" }],
+        300,
+        buckets
+      ),
+    /Solo se pueden reducir/
+  );
+});
+
+test("detecta deficit mayor que el saldo disponible en partidas", () => {
+  assert.throws(
+    () =>
+      validateNegativeBucketReductions(
+        [{ amount: 2000, bucketId: "reserva" }],
+        -3000,
+        [{ currentAmount: 2000, id: "reserva" }]
+      ),
+    /No hay saldo suficiente/
+  );
+});
+
+test("proyecta asignaciones, reducciones y snapshots de partidas", () => {
+  const buckets = [
+    { currentAmount: 1200, id: "vacaciones" },
+    { currentAmount: 5000, id: "reserva" }
+  ];
+
+  assert.deepEqual(
+    applyBucketAllocations(
+      buckets,
+      [{ amount: 100, bucketId: "vacaciones" }]
+    ),
+    [
+      {
+        adjustmentAmount: 100,
+        bucketId: "vacaciones",
+        currentAmount: 1200,
+        finalAmount: 1300
+      },
+      {
+        adjustmentAmount: 0,
+        bucketId: "reserva",
+        currentAmount: 5000,
+        finalAmount: 5000
+      }
+    ]
+  );
+  assert.deepEqual(
+    applyBucketReductions(
+      buckets,
+      [
+        { amount: 100, bucketId: "vacaciones" },
+        { amount: 200, bucketId: "reserva" }
+      ]
+    ).map((bucket) => [bucket.bucketId, bucket.finalAmount]),
+    [
+      ["vacaciones", 1100],
+      ["reserva", 4800]
+    ]
+  );
+  assert.deepEqual(
+    createMonthlyBucketSnapshots([
+      { amount: 1200, id: "vacaciones" },
+      { amount: 5000, id: "reserva" }
+    ]),
+    [
+      { amount: 1200, savingsBucketId: "vacaciones" },
+      { amount: 5000, savingsBucketId: "reserva" }
+    ]
+  );
 });
 
 test("excluye transferencias, reembolsos e inversiones del ahorro mensual", () => {

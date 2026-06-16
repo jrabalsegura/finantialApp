@@ -35,6 +35,15 @@ export type AccountForCalculations = {
   includeInNetWorth: boolean;
 };
 
+export type LongTermAccountType = "investment" | "pension" | "treasury";
+
+export type AccountForLongTermBucketAdjustment = {
+  difference: MoneyValue;
+  includeInMonthlySavings: boolean;
+  includeInNetWorth: boolean;
+  type: string;
+};
+
 export type TransactionForCalculations = {
   date: Date | string;
   amount: MoneyValue;
@@ -57,6 +66,47 @@ export type ReimbursementForCalculations = {
 
 export type SavingsBucketForCalculations = {
   currentAmount: MoneyValue;
+};
+
+export type BucketAdjustmentInput = {
+  amount: MoneyValue;
+  bucketId: string;
+};
+
+export type BucketBalanceInput = {
+  currentAmount: MoneyValue;
+  id: string;
+};
+
+export type BucketAdjustmentType = "allocation" | "reduction";
+
+export type MonthlyCloseResult = {
+  deficit: number;
+  kind: "positive" | "zero" | "negative";
+  monthlySavings: number;
+  surplus: number;
+};
+
+export type BucketAdjustmentValidation = {
+  pendingAmount: number;
+  totalAmount: number;
+};
+
+export type ProjectedBucketBalance = {
+  adjustmentAmount: number;
+  bucketId: string;
+  currentAmount: number;
+  finalAmount: number;
+};
+
+export type MonthlyBucketSnapshotInput = {
+  amount: MoneyValue;
+  id: string;
+};
+
+export type MonthlyBucketSnapshotDraft = {
+  amount: number;
+  savingsBucketId: string;
 };
 
 export type TransactionImpact = {
@@ -219,6 +269,199 @@ export function calculateUnassignedAvailableMoney(
   savingsBuckets: SavingsBucketForCalculations[]
 ): number {
   return calculateAvailableMoney(accounts) - calculateAssignedSavings(savingsBuckets);
+}
+
+export function accountFeedsLongTermBucket(
+  account: Pick<
+    AccountForLongTermBucketAdjustment,
+    "includeInMonthlySavings" | "includeInNetWorth" | "type"
+  >
+): boolean {
+  return (
+    !account.includeInMonthlySavings &&
+    account.includeInNetWorth &&
+    isLongTermAccountType(account.type)
+  );
+}
+
+export function calculateLongTermBucketAdjustment(
+  accounts: AccountForLongTermBucketAdjustment[]
+): number {
+  return sumMoney(
+    accounts
+      .filter(accountFeedsLongTermBucket)
+      .map((account) => account.difference)
+  );
+}
+
+export function getMonthlyCloseResult(monthlySavings: MoneyValue): MonthlyCloseResult {
+  const normalizedMonthlySavings = toMoneyNumber(monthlySavings);
+
+  if (normalizedMonthlySavings > 0) {
+    return {
+      deficit: 0,
+      kind: "positive",
+      monthlySavings: normalizedMonthlySavings,
+      surplus: normalizedMonthlySavings
+    };
+  }
+
+  if (normalizedMonthlySavings < 0) {
+    return {
+      deficit: Math.abs(normalizedMonthlySavings),
+      kind: "negative",
+      monthlySavings: normalizedMonthlySavings,
+      surplus: 0
+    };
+  }
+
+  return {
+    deficit: 0,
+    kind: "zero",
+    monthlySavings: 0,
+    surplus: 0
+  };
+}
+
+export function validatePositiveBucketAllocations(
+  allocations: BucketAdjustmentInput[],
+  monthlySavings: MoneyValue
+): BucketAdjustmentValidation {
+  const result = getMonthlyCloseResult(monthlySavings);
+  const totalAllocated = sumBucketAdjustments(allocations);
+
+  if (allocations.some((allocation) => toMoneyNumber(allocation.amount) < 0)) {
+    throw new Error("El reparto de ahorro no puede contener importes negativos.");
+  }
+
+  if (totalAllocated < 0) {
+    throw new Error("El reparto de ahorro no puede ser negativo.");
+  }
+
+  if (result.kind !== "positive" && totalAllocated > 0) {
+    throw new Error("No se puede repartir ahorro si el ahorro mensual no es positivo.");
+  }
+
+  if (result.kind === "positive" && totalAllocated > result.surplus) {
+    throw new Error("El reparto no puede superar el ahorro mensual real.");
+  }
+
+  if (result.kind === "positive" && totalAllocated < result.surplus) {
+    throw new Error("Todo el ahorro mensual debe quedar asignado a partidas.");
+  }
+
+  return {
+    pendingAmount: roundMoney(result.surplus - totalAllocated),
+    totalAmount: totalAllocated
+  };
+}
+
+export function validateNegativeBucketReductions(
+  reductions: BucketAdjustmentInput[],
+  monthlySavings: MoneyValue,
+  buckets: BucketBalanceInput[]
+): BucketAdjustmentValidation {
+  const result = getMonthlyCloseResult(monthlySavings);
+  const totalReduced = sumBucketAdjustments(reductions);
+
+  if (reductions.some((reduction) => toMoneyNumber(reduction.amount) < 0)) {
+    throw new Error("La reducción de partidas no puede contener importes negativos.");
+  }
+
+  if (result.kind !== "negative") {
+    if (totalReduced > 0) {
+      throw new Error("Solo se pueden reducir partidas si el ahorro mensual es negativo.");
+    }
+
+    return {
+      pendingAmount: 0,
+      totalAmount: totalReduced
+    };
+  }
+
+  const bucketBalanceById = new Map(
+    buckets.map((bucket) => [bucket.id, toMoneyNumber(bucket.currentAmount)])
+  );
+  const totalAvailableInBuckets = sumMoney(
+    buckets.map((bucket) => bucket.currentAmount)
+  );
+
+  if (totalAvailableInBuckets < result.deficit) {
+    throw new Error(
+      "No hay saldo suficiente en partidas para cubrir todo el déficit."
+    );
+  }
+
+  for (const reduction of reductions) {
+    const reductionAmount = toMoneyNumber(reduction.amount);
+    const currentAmount = bucketBalanceById.get(reduction.bucketId);
+
+    if (currentAmount == null) {
+      throw new Error("La partida de ahorro seleccionada no existe.");
+    }
+
+    if (reductionAmount > currentAmount) {
+      throw new Error(
+        "No se puede reducir una partida por encima de su saldo actual."
+      );
+    }
+  }
+
+  if (totalReduced < result.deficit) {
+    throw new Error("El déficit mensual debe quedar totalmente cubierto.");
+  }
+
+  if (totalReduced > result.deficit) {
+    throw new Error("La reducción no puede superar el déficit mensual.");
+  }
+
+  return {
+    pendingAmount: roundMoney(result.deficit - totalReduced),
+    totalAmount: totalReduced
+  };
+}
+
+export function calculateProjectedBucketBalance(
+  bucket: BucketBalanceInput,
+  adjustmentAmount: MoneyValue,
+  type: BucketAdjustmentType
+): ProjectedBucketBalance {
+  const currentAmount = toMoneyNumber(bucket.currentAmount);
+  const normalizedAdjustmentAmount = toMoneyNumber(adjustmentAmount);
+  const signedAdjustment =
+    type === "allocation"
+      ? normalizedAdjustmentAmount
+      : -normalizedAdjustmentAmount;
+
+  return {
+    adjustmentAmount: normalizedAdjustmentAmount,
+    bucketId: bucket.id,
+    currentAmount,
+    finalAmount: roundMoney(currentAmount + signedAdjustment)
+  };
+}
+
+export function applyBucketAllocations(
+  buckets: BucketBalanceInput[],
+  allocations: BucketAdjustmentInput[]
+): ProjectedBucketBalance[] {
+  return applyBucketAdjustments(buckets, allocations, "allocation");
+}
+
+export function applyBucketReductions(
+  buckets: BucketBalanceInput[],
+  reductions: BucketAdjustmentInput[]
+): ProjectedBucketBalance[] {
+  return applyBucketAdjustments(buckets, reductions, "reduction");
+}
+
+export function createMonthlyBucketSnapshots(
+  buckets: MonthlyBucketSnapshotInput[]
+): MonthlyBucketSnapshotDraft[] {
+  return buckets.map((bucket) => ({
+    amount: toMoneyNumber(bucket.amount),
+    savingsBucketId: bucket.id
+  }));
 }
 
 export function calculatePendingReimbursements(
@@ -392,6 +635,35 @@ function sumMoney(values: MoneyValue[]): number {
     (total, value) => total + toMoneyNumber(value),
     0
   );
+}
+
+function sumBucketAdjustments(adjustments: BucketAdjustmentInput[]): number {
+  return sumMoney(adjustments.map((adjustment) => adjustment.amount));
+}
+
+function applyBucketAdjustments(
+  buckets: BucketBalanceInput[],
+  adjustments: BucketAdjustmentInput[],
+  type: BucketAdjustmentType
+): ProjectedBucketBalance[] {
+  const adjustmentByBucketId = new Map(
+    adjustments.map((adjustment) => [
+      adjustment.bucketId,
+      toMoneyNumber(adjustment.amount)
+    ])
+  );
+
+  return buckets.map((bucket) =>
+    calculateProjectedBucketBalance(
+      bucket,
+      adjustmentByBucketId.get(bucket.id) ?? 0,
+      type
+    )
+  );
+}
+
+function isLongTermAccountType(type: string): type is LongTermAccountType {
+  return type === "investment" || type === "pension" || type === "treasury";
 }
 
 function roundMoney(value: number): number {

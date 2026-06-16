@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { closeMonth } from "../actions";
+import { closeMonth, undoLatestMonthlyClose } from "../actions";
+import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
 import { MonthlyCloseForm } from "../components/MonthlyCloseForm";
 import {
   calculateRealMonthlyExpense,
@@ -19,6 +20,7 @@ import {
 export const dynamic = "force-dynamic";
 
 type ExistingMonthlyClose = {
+  id: string;
   accountSnapshots: Array<{
     account: { name: string };
     calculatedBalance: MoneyValue;
@@ -59,6 +61,7 @@ export default async function MonthlyClosePage({
     savingsBuckets,
     monthlyTransactions,
     existingClose,
+    latestClose,
     pendingRecurringCount
   ] = await Promise.all([
     prisma.account.findMany({
@@ -68,7 +71,9 @@ export default async function MonthlyClosePage({
         name: true,
         currentBalance: true,
         includeInAvailableMoney: true,
-        includeInNetWorth: true
+        includeInNetWorth: true,
+        includeInMonthlySavings: true,
+        type: true
       }
     }),
     prisma.savingsBucket.findMany({
@@ -135,6 +140,10 @@ export default async function MonthlyClosePage({
           }
         }
       }
+    }),
+    prisma.monthlyClose.findFirst({
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      select: { id: true }
     }),
     prisma.recurringTransactionOccurrence.count({
       where: {
@@ -221,7 +230,11 @@ export default async function MonthlyClosePage({
         ) : null}
 
         {existingClose ? (
-          <ExistingClose close={existingClose} />
+          <ExistingClose
+            close={existingClose}
+            isLatestClose={latestClose?.id === existingClose.id}
+            returnTo={`/monthly-close?period=${formatPeriodValue(selectedPeriod)}`}
+          />
         ) : (
           <MonthlyCloseForm
             accounts={accounts.map((account) => ({
@@ -229,7 +242,9 @@ export default async function MonthlyClosePage({
               id: account.id,
               includeInAvailableMoney: account.includeInAvailableMoney,
               includeInNetWorth: account.includeInNetWorth,
-              name: account.name
+              includeInMonthlySavings: account.includeInMonthlySavings,
+              name: account.name,
+              type: account.type
             }))}
             action={closeMonth}
             baseMonthlySavings={monthlySavings}
@@ -254,9 +269,13 @@ export default async function MonthlyClosePage({
 }
 
 function ExistingClose({
-  close
+  close,
+  isLatestClose,
+  returnTo
 }: {
   close: ExistingMonthlyClose;
+  isLatestClose: boolean;
+  returnTo: string;
 }) {
   return (
     <div className="grid gap-6">
@@ -267,11 +286,25 @@ function ExistingClose({
       </section>
       <section className="rounded-lg border border-line bg-white shadow-sm">
         <div className="border-b border-line px-4 py-3 sm:px-5">
-          <h2 className="text-lg font-semibold text-ink">Cierre guardado</h2>
-          <p className="mt-1 text-sm text-muted">
-            Este mes ya tiene snapshots mensuales.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-ink">
+                Cierre guardado
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Este mes ya tiene snapshots mensuales.
+              </p>
+            </div>
+            {isLatestClose ? (
+              <UndoMonthlyCloseForm closeId={close.id} returnTo={returnTo} />
+            ) : null}
+          </div>
         </div>
+        {!isLatestClose ? (
+          <div className="border-b border-line bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 sm:px-5">
+            Solo se puede deshacer el último cierre mensual.
+          </div>
+        ) : null}
         <ul className="divide-y divide-line">
           {close.accountSnapshots.map((snapshot) => (
             <li
@@ -329,6 +362,27 @@ function ExistingClose({
         )}
       </section>
     </div>
+  );
+}
+
+function UndoMonthlyCloseForm({
+  closeId,
+  returnTo
+}: {
+  closeId: string;
+  returnTo: string;
+}) {
+  return (
+    <form action={undoLatestMonthlyClose}>
+      <input name="closeId" type="hidden" value={closeId} />
+      <input name="returnTo" type="hidden" value={returnTo} />
+      <ConfirmSubmitButton
+        className="inline-flex min-h-11 items-center justify-center rounded-lg border border-rose-300 bg-rose-50 px-4 text-sm font-bold text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+        confirmMessage="¿Deshacer el último cierre mensual? Se revertirán sus ajustes de cuenta y sus asignaciones o reducciones de partidas."
+      >
+        Deshacer cierre
+      </ConfirmSubmitButton>
+    </form>
   );
 }
 

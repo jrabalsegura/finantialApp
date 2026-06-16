@@ -167,6 +167,7 @@ model Transaction {
   destinationAccountId   String?
   categoryId             String?
   savingsBucketId        String?
+  monthlyCloseId         String?
   affectsRealBalance     Boolean         @default(true)
   affectsPersonalExpense Boolean         @default(false)
   affectsPersonalIncome  Boolean         @default(false)
@@ -180,6 +181,7 @@ model Transaction {
   destinationAccount    Account?                        @relation("TransactionDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
   category              Category?                       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   savingsBucket         SavingsBucket?                  @relation(fields: [savingsBucketId], references: [id], onDelete: SetNull)
+  monthlyClose          MonthlyClose?                   @relation(fields: [monthlyCloseId], references: [id], onDelete: SetNull)
   reimbursement         Reimbursement?                  @relation("ReimbursementPayments", fields: [reimbursementId], references: [id], onDelete: SetNull)
   originalReimbursement Reimbursement?                  @relation("OriginalReimbursementTransaction")
   recurringOccurrence   RecurringTransactionOccurrence?
@@ -295,6 +297,7 @@ model MonthlyClose {
 
   accountSnapshots MonthlyAccountSnapshot[]
   bucketSnapshots  MonthlyBucketSnapshot[]
+  generatedTransactions Transaction[]
 
   @@unique([year, month])
 }

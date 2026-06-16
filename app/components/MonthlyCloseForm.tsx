@@ -10,13 +10,20 @@ import {
 import { currencyFormatter } from "@/lib/formatters";
 import { getBucketGoalProgress } from "@/domain/savings-goals";
 import { SavingsGoalProgress } from "./SavingsGoalProgress";
+import {
+  accountFeedsLongTermBucket,
+  calculateLongTermBucketAdjustment,
+  getMonthlyCloseResult
+} from "@/domain/financial-calculations";
 
 type MonthlyCloseAccount = {
   calculatedBalance: number;
   id: string;
   includeInAvailableMoney: boolean;
   includeInNetWorth: boolean;
+  includeInMonthlySavings: boolean;
   name: string;
+  type: string;
 };
 
 type MonthlyCloseBucket = {
@@ -80,6 +87,9 @@ export function MonthlyCloseForm({
   const [allocations, setAllocations] = useState<Record<string, string>>(() =>
     Object.fromEntries(buckets.map((bucket) => [bucket.id, "0"]))
   );
+  const [reductions, setReductions] = useState<Record<string, string>>(() =>
+    Object.fromEntries(buckets.map((bucket) => [bucket.id, "0"]))
+  );
 
   const accountRows = useMemo(
     () =>
@@ -99,6 +109,10 @@ export function MonthlyCloseForm({
   );
   const estimatedMonthlySavings = roundMoney(
     accountRows.reduce((total, account) => {
+      if (accountFeedsLongTermBucket(account)) {
+        return total;
+      }
+
       if (account.adjustmentKind === "income" && account.difference > 0) {
         return total + account.difference;
       }
@@ -110,6 +124,16 @@ export function MonthlyCloseForm({
       return total;
     }, baseMonthlySavings)
   );
+  const closeResult = getMonthlyCloseResult(estimatedMonthlySavings);
+  const longTermBucket = buckets.find((bucket) => bucket.isLongTerm) ?? null;
+  const longTermBucketAdjustment = calculateLongTermBucketAdjustment(
+    accountRows.map((account) => ({
+      difference: account.difference,
+      includeInMonthlySavings: account.includeInMonthlySavings,
+      includeInNetWorth: account.includeInNetWorth,
+      type: account.type
+    }))
+  );
   const allocationTotal = roundMoney(
     buckets.reduce(
       (total, bucket) => total + parseInputAmount(allocations[bucket.id]),
@@ -117,7 +141,22 @@ export function MonthlyCloseForm({
     )
   );
   const allocationRemaining = roundMoney(
-    Math.max(estimatedMonthlySavings, 0) - allocationTotal
+    closeResult.surplus - allocationTotal
+  );
+  const reductionTotal = roundMoney(
+    buckets.reduce(
+      (total, bucket) => total + parseInputAmount(reductions[bucket.id]),
+      0
+    )
+  );
+  const reductionRemaining = roundMoney(
+    closeResult.deficit - reductionTotal
+  );
+  const totalAvailableInBuckets = roundMoney(
+    buckets.reduce((total, bucket) => total + bucket.currentAmount, 0)
+  );
+  const hasReductionOverBalance = buckets.some(
+    (bucket) => parseInputAmount(reductions[bucket.id]) > bucket.currentAmount
   );
   const hasInvalidAdjustment = accountRows.some(
     (account) =>
@@ -126,7 +165,36 @@ export function MonthlyCloseForm({
   );
   const hasInvalidAllocation =
     allocationTotal < 0 ||
-    allocationTotal > Math.max(estimatedMonthlySavings, 0);
+    (closeResult.kind === "positive"
+      ? allocationTotal !== closeResult.surplus
+      : allocationTotal > 0);
+  const hasInvalidReduction =
+    reductionTotal < 0 ||
+    hasReductionOverBalance ||
+    (closeResult.kind === "negative"
+      ? reductionTotal !== closeResult.deficit
+      : reductionTotal > 0);
+  const hasInsufficientBucketBalance =
+    closeResult.kind === "negative" &&
+    totalAvailableInBuckets < closeResult.deficit;
+  const longTermOrdinaryAllocation =
+    longTermBucket == null ? 0 : parseInputAmount(allocations[longTermBucket.id]);
+  const longTermOrdinaryReduction =
+    longTermBucket == null ? 0 : parseInputAmount(reductions[longTermBucket.id]);
+  const projectedLongTermBucketBalance =
+    longTermBucket == null
+      ? null
+      : roundMoney(
+          longTermBucket.currentAmount +
+            longTermOrdinaryAllocation -
+            longTermOrdinaryReduction +
+            longTermBucketAdjustment
+        );
+  const hasInvalidLongTermAdjustment =
+    longTermBucketAdjustment !== 0 &&
+    (longTermBucket == null ||
+      projectedLongTermBucketBalance == null ||
+      projectedLongTermBucketBalance < 0);
 
   return (
     <form action={formAction} className="grid gap-6">
@@ -173,6 +241,8 @@ export function MonthlyCloseForm({
                       );
                       const currentKind =
                         adjustmentKinds[account.id] ?? "technical";
+                      const feedsLongTermBucket =
+                        accountFeedsLongTermBucket(account);
 
                       setRealBalances((current) => ({
                         ...current,
@@ -180,6 +250,7 @@ export function MonthlyCloseForm({
                       }));
 
                       if (
+                        !feedsLongTermBucket &&
                         nextDifference > 0 &&
                         (account.difference === 0 || currentKind === "expense")
                       ) {
@@ -190,6 +261,7 @@ export function MonthlyCloseForm({
                       }
 
                       if (
+                        !feedsLongTermBucket &&
                         nextDifference < 0 &&
                         (account.difference === 0 || currentKind === "income")
                       ) {
@@ -207,7 +279,19 @@ export function MonthlyCloseForm({
                 <ReadOnlyAmount label="Diferencia" value={account.difference} />
               </div>
 
-              {account.difference !== 0 ? (
+              {account.difference !== 0 && accountFeedsLongTermBucket(account) ? (
+                <div className="grid gap-2 sm:max-w-md">
+                  <input
+                    name={`adjustmentKind_${account.id}`}
+                    type="hidden"
+                    value="technical"
+                  />
+                  <p className="rounded-lg bg-surface px-3 py-2 text-sm font-medium text-muted">
+                    Esta cuenta no cuenta para el ahorro mensual; su diferencia
+                    se trata como ajuste técnico y se refleja en Largo plazo.
+                  </p>
+                </div>
+              ) : account.difference !== 0 ? (
                 <label className="grid gap-2 text-sm font-medium text-ink sm:max-w-md">
                   Tipo de ajuste
                   <select
@@ -275,18 +359,34 @@ export function MonthlyCloseForm({
       <section className="rounded-lg border border-line bg-white shadow-sm">
         <StepHeader
           step="7"
-          title="Reparto del ahorro"
-          text="El reparto crea asignaciones a partidas de ahorro y se guarda en el snapshot del mes."
+          title={getBucketStepTitle(closeResult.kind)}
+          text={getBucketStepText(closeResult.kind)}
         />
-        {buckets.length > 0 ? (
+        {longTermBucket || longTermBucketAdjustment !== 0 ? (
+          <AutomaticLongTermAdjustment
+            adjustment={longTermBucketAdjustment}
+            bucketName={longTermBucket?.name ?? "Largo plazo"}
+            currentAmount={longTermBucket?.currentAmount ?? null}
+            isInvalid={hasInvalidLongTermAdjustment}
+            projectedAmount={projectedLongTermBucketBalance}
+          />
+        ) : null}
+        {buckets.length > 0 && closeResult.kind === "positive" ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {buckets.map((bucket) => {
                 const allocationAmount = parseInputAmount(
                   allocations[bucket.id]
                 );
+                const automaticAdjustment =
+                  bucket.id === longTermBucket?.id
+                    ? longTermBucketAdjustment
+                    : 0;
                 const projectedProgress = getBucketGoalProgress({
-                  currentAmount: bucket.currentAmount + allocationAmount,
+                  currentAmount:
+                    bucket.currentAmount +
+                    allocationAmount +
+                    automaticAdjustment,
                   targetAmount: bucket.targetAmount
                 });
 
@@ -344,19 +444,137 @@ export function MonthlyCloseForm({
               })}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Metric label="A repartir" value={Math.max(estimatedMonthlySavings, 0)} />
+              <Metric label="A repartir" value={closeResult.surplus} />
               <Metric label="Repartido" value={allocationTotal} />
               <Metric label="Restante" value={allocationRemaining} />
             </div>
             {hasInvalidAllocation ? (
               <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
-                El reparto no puede superar el ahorro mensual positivo.
+                Todo el ahorro mensual positivo debe quedar asignado a
+                partidas, sin restante ni exceso.
               </p>
             ) : null}
           </div>
+        ) : buckets.length > 0 && closeResult.kind === "negative" ? (
+          <div className="grid gap-4 p-4 sm:p-5">
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+              <p className="font-semibold">
+                Este mes tienes un déficit de{" "}
+                {currencyFormatter.format(closeResult.deficit)}.
+              </p>
+              <p className="mt-1">
+                Selecciona de qué partidas quieres descontarlo para cuadrar el
+                cierre.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {buckets.map((bucket) => {
+                const reductionAmount = parseInputAmount(reductions[bucket.id]);
+                const automaticAdjustment =
+                  bucket.id === longTermBucket?.id
+                    ? longTermBucketAdjustment
+                    : 0;
+                const finalAmount = roundMoney(
+                  bucket.currentAmount - reductionAmount + automaticAdjustment
+                );
+                const currentProgress = getBucketGoalProgress({
+                  currentAmount: bucket.currentAmount,
+                  targetAmount: bucket.targetAmount
+                });
+                const finalProgress = getBucketGoalProgress({
+                  currentAmount: finalAmount,
+                  targetAmount: bucket.targetAmount
+                });
+                const isOverBalance = reductionAmount > bucket.currentAmount;
+
+                return (
+                  <div
+                    className="grid gap-3 rounded-lg border border-line bg-surface p-3 text-sm text-ink"
+                    key={bucket.id}
+                  >
+                    <SavingsGoalProgress
+                      bucket={{
+                        currentAmount: bucket.currentAmount,
+                        name: bucket.name,
+                        targetAmount: bucket.targetAmount
+                      }}
+                      compact
+                      showName
+                    />
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted">
+                      <BucketAmount label="Saldo actual" value={bucket.currentAmount} />
+                      <BucketAmount label="Objetivo" value={bucket.targetAmount} />
+                      <BucketAmount label="Saldo final" value={finalAmount} />
+                      <BucketAmount
+                        label="Hasta objetivo"
+                        value={finalProgress.remainingAmount}
+                      />
+                    </div>
+                    {currentProgress.hasGoal ? (
+                      <p className="rounded-lg bg-white px-3 py-2 text-xs text-muted">
+                        Actual: {formatPercentage(currentProgress.percentage ?? 0)}
+                        {" · "}Final:{" "}
+                        {formatPercentage(finalProgress.percentage ?? 0)}
+                      </p>
+                    ) : null}
+                    <label className="grid gap-2 font-medium">
+                      Reducir en este cierre
+                      <input
+                        className="field-input"
+                        max={formatInputAmount(bucket.currentAmount)}
+                        min="0"
+                        name={`savingsReduction_${bucket.id}`}
+                        onChange={(event) =>
+                          setReductions((current) => ({
+                            ...current,
+                            [bucket.id]: event.target.value
+                          }))
+                        }
+                        step="0.01"
+                        type="number"
+                        value={reductions[bucket.id]}
+                      />
+                    </label>
+                    {isOverBalance ? (
+                      <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+                        No puedes reducir más que el saldo actual de la partida.
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="Déficit mensual" value={closeResult.deficit} />
+              <Metric label="Total reducido" value={reductionTotal} />
+              <Metric label="Pendiente" value={reductionRemaining} />
+            </div>
+            {hasInsufficientBucketBalance ? (
+              <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
+                No hay saldo suficiente en partidas para cubrir todo el déficit.
+              </p>
+            ) : null}
+            {reductionRemaining > 0 && !hasInsufficientBucketBalance ? (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                Queda déficit pendiente de cubrir antes de guardar el cierre.
+              </p>
+            ) : null}
+            {reductionRemaining < 0 ? (
+              <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
+                La reducción supera el déficit mensual.
+              </p>
+            ) : null}
+          </div>
+        ) : closeResult.kind === "zero" ? (
+          <div className="px-4 py-8 text-sm text-muted sm:px-5">
+            El ahorro mensual estimado es cero. No hay sobrante que repartir ni
+            déficit que cubrir.
+          </div>
         ) : (
           <div className="px-4 py-8 text-sm text-muted sm:px-5">
-            No hay partidas de ahorro para repartir.
+            No hay partidas de ahorro disponibles para este cierre.
           </div>
         )}
       </section>
@@ -390,7 +608,10 @@ export function MonthlyCloseForm({
             isPending ||
             !confirmed ||
             hasInvalidAdjustment ||
-            hasInvalidAllocation
+            hasInvalidAllocation ||
+            hasInvalidReduction ||
+            hasInsufficientBucketBalance ||
+            hasInvalidLongTermAdjustment
           }
           type="submit"
         >
@@ -423,6 +644,82 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
+function BucketAmount({
+  label,
+  value
+}: {
+  label: string;
+  value: number | null;
+}) {
+  return (
+    <div className="rounded-lg bg-white px-3 py-2">
+      <p className="font-medium text-muted">{label}</p>
+      <p className="amount-text mt-1 text-sm font-semibold text-ink">
+        {value == null ? "Sin objetivo" : currencyFormatter.format(value)}
+      </p>
+    </div>
+  );
+}
+
+function AutomaticLongTermAdjustment({
+  adjustment,
+  bucketName,
+  currentAmount,
+  isInvalid,
+  projectedAmount
+}: {
+  adjustment: number;
+  bucketName: string;
+  currentAmount: number | null;
+  isInvalid: boolean;
+  projectedAmount: number | null;
+}) {
+  const tone =
+    adjustment > 0
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : adjustment < 0
+        ? "border-rose-200 bg-rose-50 text-rose-900"
+        : "border-line bg-surface text-muted";
+
+  return (
+    <div className="grid gap-3 border-b border-line p-4 sm:grid-cols-[1fr_180px] sm:items-end sm:p-5">
+      <div className={`rounded-lg border px-3 py-2 text-sm ${tone}`}>
+        <p className="font-semibold">
+          Ajuste automático de {bucketName}:{" "}
+          {currencyFormatter.format(adjustment)}
+        </p>
+        <p className="mt-1">
+          Sale de las diferencias de cuentas de largo plazo que no cuentan para
+          el ahorro mensual. No se trata como ingreso ni como gasto.
+        </p>
+        {currentAmount != null && projectedAmount != null ? (
+          <p className="mt-1">
+            Saldo final estimado:{" "}
+            {currencyFormatter.format(projectedAmount)}
+          </p>
+        ) : null}
+        {isInvalid ? (
+          <p className="mt-2 font-medium">
+            Falta una partida de largo plazo o el ajuste dejaría su saldo en
+            negativo.
+          </p>
+        ) : null}
+      </div>
+      <label className="grid gap-2 text-sm font-medium text-ink">
+        Largo plazo automático
+        <input
+          className="field-input"
+          inputMode="decimal"
+          name="longTermBucketAdjustment"
+          readOnly
+          type="number"
+          value={formatInputAmount(adjustment)}
+        />
+      </label>
+    </div>
+  );
+}
+
 function ReadOnlyAmount({ label, value }: { label: string; value: number }) {
   return (
     <div className="grid gap-2 text-sm font-medium text-ink">
@@ -432,6 +729,30 @@ function ReadOnlyAmount({ label, value }: { label: string; value: number }) {
       </span>
     </div>
   );
+}
+
+function getBucketStepTitle(kind: "positive" | "zero" | "negative"): string {
+  if (kind === "positive") {
+    return "Reparto del ahorro";
+  }
+
+  if (kind === "negative") {
+    return "Cobertura del déficit";
+  }
+
+  return "Partidas de ahorro";
+}
+
+function getBucketStepText(kind: "positive" | "zero" | "negative"): string {
+  if (kind === "positive") {
+    return "El reparto crea asignaciones a partidas de ahorro y se guarda en el snapshot del mes.";
+  }
+
+  if (kind === "negative") {
+    return "Las reducciones explican de qué ahorro asignado sale el déficit del mes y se guardan en el snapshot final.";
+  }
+
+  return "Con ahorro mensual cero no hace falta asignar ni reducir partidas para cuadrar el cierre.";
 }
 
 function StepHeader({

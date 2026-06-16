@@ -1,9 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  accountFeedsLongTermBucket,
+  calculateLongTermBucketAdjustment,
+  createMonthlyBucketSnapshots,
   calculateAvailableMoney,
   calculateNetWorth,
   calculateRealMonthlyExpense,
@@ -11,7 +15,9 @@ import {
   calculateRealMonthlySavings,
   getDefaultTransactionImpact,
   getMonthDateRange,
-  toMoneyNumber
+  toMoneyNumber,
+  validateNegativeBucketReductions,
+  validatePositiveBucketAllocations
 } from "@/domain/financial-calculations";
 import {
   ACCOUNT_TYPES,
@@ -696,6 +702,7 @@ export async function closeMonth(
             currentBalance: true,
             includeInAvailableMoney: true,
             includeInNetWorth: true,
+            includeInMonthlySavings: true,
             type: true
           }
         }),
@@ -729,6 +736,7 @@ export async function closeMonth(
         difference: number;
         realBalance: number;
       }> = [];
+      const generatedCloseTransactionIds: string[] = [];
       const closedAccounts = accounts.map((account) => {
         const calculatedBalance = toMoneyNumber(account.currentBalance);
         const realBalance = parseAmountAllowingZero(
@@ -762,7 +770,9 @@ export async function closeMonth(
 
         validateAdjustmentDirection(account.adjustmentKind, account.difference);
 
-        const impact = getMonthlyCloseAdjustmentImpact(account.adjustmentKind);
+        const impact = accountFeedsLongTermBucket(account)
+          ? getMonthlyCloseAdjustmentImpact("technical")
+          : getMonthlyCloseAdjustmentImpact(account.adjustmentKind);
         // El importe se guarda en positivo; el signo real permanece en el
         // snapshot y los flags determinan su impacto en informes y ahorro.
         const adjustmentTransaction = await tx.transaction.create({
@@ -798,6 +808,7 @@ export async function closeMonth(
         if (snapshot) {
           snapshot.adjustmentTransactionId = adjustmentTransaction.id;
         }
+        generatedCloseTransactionIds.push(adjustmentTransaction.id);
       }
 
       const transactionsAfterAdjustments = await tx.transaction.findMany({
@@ -839,31 +850,63 @@ export async function closeMonth(
           formData.get(`savingsAllocation_${bucket.id}`)
         )
       }));
-      const negativeAllocation = savingsAllocations.find(
-        (allocation) => allocation.amount < 0
-      );
-
-      if (negativeAllocation) {
-        throw new Error("El reparto de ahorro no puede contener importes negativos.");
-      }
-
-      const totalAllocated = roundMoney(
-        savingsAllocations.reduce(
-          (total, allocation) => total + allocation.amount,
-          0
+      const savingsReductions = savingsBuckets.map((bucket) => ({
+        bucketId: bucket.id,
+        amount: parseAmountAllowingZero(
+          formData.get(`savingsReduction_${bucket.id}`)
         )
+      }));
+      const longTermBucketAdjustment = calculateLongTermBucketAdjustment(
+        closedAccounts.map((account) => ({
+          difference: account.difference,
+          includeInMonthlySavings: account.includeInMonthlySavings,
+          includeInNetWorth: account.includeInNetWorth,
+          type: account.type
+        }))
       );
 
-      if (totalAllocated < 0) {
-        throw new Error("El reparto de ahorro no puede ser negativo.");
+      validatePositiveBucketAllocations(savingsAllocations, monthlySavings);
+      validateNegativeBucketReductions(
+        savingsReductions,
+        monthlySavings,
+        savingsBuckets.map((bucket) => ({
+          currentAmount: bucket.currentAmount,
+          id: bucket.id
+        }))
+      );
+
+      const longTermBucket =
+        longTermBucketAdjustment !== 0
+          ? savingsBuckets.find((bucket) => bucket.isLongTerm)
+          : null;
+
+      if (longTermBucketAdjustment !== 0 && !longTermBucket) {
+        throw new Error(
+          "No existe una partida de ahorro de largo plazo para asignar el ajuste automático."
+        );
       }
 
-      if (monthlySavings <= 0 && totalAllocated > 0) {
-        throw new Error("No se puede repartir ahorro si el ahorro mensual no es positivo.");
-      }
+      if (longTermBucket && longTermBucketAdjustment < 0) {
+        const longTermOrdinaryAllocation =
+          savingsAllocations.find(
+            (allocation) => allocation.bucketId === longTermBucket.id
+          )?.amount ?? 0;
+        const longTermOrdinaryReduction =
+          savingsReductions.find(
+            (reduction) => reduction.bucketId === longTermBucket.id
+          )?.amount ?? 0;
+        const projectedLongTermBalance = roundMoney(
+          toMoneyNumber(longTermBucket.currentAmount) +
+            longTermOrdinaryAllocation -
+            longTermOrdinaryReduction +
+            longTermBucketAdjustment
+        );
 
-      if (monthlySavings > 0 && totalAllocated > roundMoney(monthlySavings)) {
-        throw new Error("El reparto no puede superar el ahorro mensual real.");
+        if (projectedLongTermBalance < 0) {
+          throw new Error(
+            "El ajuste automático de largo plazo dejaría la partida en negativo."
+          );
+        }
       }
 
       for (const allocation of savingsAllocations) {
@@ -884,7 +927,7 @@ export async function closeMonth(
           }
         });
 
-        await tx.transaction.create({
+        const transaction = await tx.transaction.create({
           data: {
             date: closeDate,
             amount: allocation.amount,
@@ -899,6 +942,84 @@ export async function closeMonth(
             affectsNetWorth: impact.affectsNetWorth
           }
         });
+        generatedCloseTransactionIds.push(transaction.id);
+      }
+
+      for (const reduction of savingsReductions) {
+        if (reduction.amount <= 0) {
+          continue;
+        }
+
+        const impact = getDefaultTransactionImpact("savings_withdrawal");
+
+        // Cubrir un déficit reduce ahorro ya asignado: no crea gasto ni
+        // ingreso adicional y no mueve saldos bancarios reales.
+        await tx.savingsBucket.update({
+          where: { id: reduction.bucketId },
+          data: {
+            currentAmount: {
+              decrement: reduction.amount
+            }
+          }
+        });
+
+        const transaction = await tx.transaction.create({
+          data: {
+            date: closeDate,
+            amount: reduction.amount,
+            type: "savings_withdrawal",
+            description: `Reducción cierre negativo ${String(month).padStart(
+              2,
+              "0"
+            )}/${year}`,
+            accountId: defaultAccount.id,
+            savingsBucketId: reduction.bucketId,
+            affectsRealBalance: impact.affectsRealBalance,
+            affectsPersonalExpense: impact.affectsPersonalExpense,
+            affectsPersonalIncome: impact.affectsPersonalIncome,
+            affectsMonthlySavings: impact.affectsMonthlySavings,
+            affectsNetWorth: impact.affectsNetWorth
+          }
+        });
+        generatedCloseTransactionIds.push(transaction.id);
+      }
+
+      if (longTermBucket && longTermBucketAdjustment !== 0) {
+        const adjustmentAmount = Math.abs(longTermBucketAdjustment);
+        const transactionType =
+          longTermBucketAdjustment > 0
+            ? "savings_allocation"
+            : "savings_withdrawal";
+        const impact = getDefaultTransactionImpact(transactionType);
+
+        await tx.savingsBucket.update({
+          where: { id: longTermBucket.id },
+          data: {
+            currentAmount:
+              longTermBucketAdjustment > 0
+                ? { increment: adjustmentAmount }
+                : { decrement: adjustmentAmount }
+          }
+        });
+
+        const transaction = await tx.transaction.create({
+          data: {
+            date: closeDate,
+            amount: adjustmentAmount,
+            type: transactionType,
+            description: `Ajuste automático largo plazo cierre ${String(
+              month
+            ).padStart(2, "0")}/${year}`,
+            accountId: defaultAccount.id,
+            savingsBucketId: longTermBucket.id,
+            affectsRealBalance: impact.affectsRealBalance,
+            affectsPersonalExpense: impact.affectsPersonalExpense,
+            affectsPersonalIncome: impact.affectsPersonalIncome,
+            affectsMonthlySavings: impact.affectsMonthlySavings,
+            affectsNetWorth: impact.affectsNetWorth
+          }
+        });
+        generatedCloseTransactionIds.push(transaction.id);
       }
 
       const [finalSavingsBuckets, reimbursements] = await Promise.all([
@@ -953,6 +1074,19 @@ export async function closeMonth(
         }
       });
 
+      if (generatedCloseTransactionIds.length > 0) {
+        await tx.transaction.updateMany({
+          where: {
+            id: {
+              in: generatedCloseTransactionIds
+            }
+          },
+          data: {
+            monthlyCloseId: monthlyClose.id
+          }
+        });
+      }
+
       for (const snapshot of accountSnapshots) {
         await tx.monthlyAccountSnapshot.create({
           data: {
@@ -966,12 +1100,19 @@ export async function closeMonth(
         });
       }
 
-      for (const bucket of finalSavingsBuckets) {
+      const bucketSnapshots = createMonthlyBucketSnapshots(
+        finalSavingsBuckets.map((bucket) => ({
+          amount: bucket.currentAmount,
+          id: bucket.id
+        }))
+      );
+
+      for (const bucketSnapshot of bucketSnapshots) {
         await tx.monthlyBucketSnapshot.create({
           data: {
             monthlyCloseId: monthlyClose.id,
-            savingsBucketId: bucket.id,
-            amount: bucket.currentAmount
+            savingsBucketId: bucketSnapshot.savingsBucketId,
+            amount: bucketSnapshot.amount
           }
         });
       }
@@ -994,6 +1135,121 @@ export async function closeMonth(
   }
 }
 
+export async function undoLatestMonthlyClose(formData: FormData): Promise<void> {
+  const closeId = parseRequiredString(formData.get("closeId"));
+  const returnTo = parseUndoReturnTo(formData.get("returnTo"));
+
+  await prisma.$transaction(async (tx) => {
+    const close = await tx.monthlyClose.findUnique({
+      where: { id: closeId },
+      include: {
+        accountSnapshots: {
+          select: {
+            adjustmentTransactionId: true,
+            accountId: true,
+            difference: true
+          }
+        },
+        generatedTransactions: {
+          select: {
+            amount: true,
+            id: true,
+            savingsBucketId: true,
+            type: true
+          }
+        }
+      }
+    });
+
+    if (!close) {
+      throw new Error("El cierre mensual no existe.");
+    }
+
+    const latestClose = await tx.monthlyClose.findFirst({
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      select: { id: true }
+    });
+
+    if (!latestClose || latestClose.id !== close.id) {
+      throw new Error("Solo se puede deshacer el último cierre mensual.");
+    }
+
+    for (const snapshot of close.accountSnapshots) {
+      const difference = toMoneyNumber(snapshot.difference);
+
+      if (difference === 0) {
+        continue;
+      }
+
+      await tx.account.update({
+        where: { id: snapshot.accountId },
+        data: {
+          currentBalance: {
+            decrement: difference
+          }
+        }
+      });
+    }
+
+    for (const transaction of close.generatedTransactions) {
+      if (!transaction.savingsBucketId) {
+        continue;
+      }
+
+      const amount = toMoneyNumber(transaction.amount);
+
+      if (transaction.type === "savings_allocation") {
+        await tx.savingsBucket.update({
+          where: { id: transaction.savingsBucketId },
+          data: {
+            currentAmount: {
+              decrement: amount
+            }
+          }
+        });
+      }
+
+      if (transaction.type === "savings_withdrawal") {
+        await tx.savingsBucket.update({
+          where: { id: transaction.savingsBucketId },
+          data: {
+            currentAmount: {
+              increment: amount
+            }
+          }
+        });
+      }
+    }
+
+    const generatedTransactionIds = new Set(
+      close.generatedTransactions.map((transaction) => transaction.id)
+    );
+
+    for (const snapshot of close.accountSnapshots) {
+      if (snapshot.adjustmentTransactionId) {
+        generatedTransactionIds.add(snapshot.adjustmentTransactionId);
+      }
+    }
+
+    if (generatedTransactionIds.size > 0) {
+      await tx.transaction.deleteMany({
+        where: {
+          id: {
+            in: Array.from(generatedTransactionIds)
+          }
+        }
+      });
+    }
+
+    await tx.monthlyClose.delete({
+      where: { id: close.id }
+    });
+  });
+
+  revalidateMonthlyCloseViews();
+  redirect(returnTo);
+}
+
 function parseCloseMonth(value: FormDataEntryValue | null): number {
   const parsedValue = parseIntegerField(value, "Mes no válido.");
 
@@ -1012,6 +1268,22 @@ function parseCloseYear(value: FormDataEntryValue | null): number {
   }
 
   return parsedValue;
+}
+
+function parseUndoReturnTo(value: FormDataEntryValue | null): string {
+  if (typeof value !== "string") {
+    return "/history";
+  }
+
+  if (
+    value === "/history" ||
+    value === "/monthly-close" ||
+    value.startsWith("/monthly-close?")
+  ) {
+    return value;
+  }
+
+  return "/history";
 }
 
 function parseIntegerField(
