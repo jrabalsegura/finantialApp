@@ -11,7 +11,6 @@ import {
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
-  calculateUnassignedAvailableMoney,
   getMonthDateRange,
   toMoneyNumber
 } from "@/domain/financial-calculations";
@@ -238,13 +237,10 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     netWorth: calculateNetWorth(accounts, reimbursements),
     monthlyIncome: projectedMonthlyCashflow.income,
     monthlyExpense: projectedMonthlyCashflow.expense,
+    actualMonthlyExpense,
     monthlySavings: projectedMonthlyCashflow.savings,
     pendingReimbursements: calculatePendingReimbursements(reimbursements),
     assignedSavings: calculateAssignedSavings(manualSavingsBuckets),
-    unassignedMoney: calculateUnassignedAvailableMoney(
-      accounts,
-      manualSavingsBuckets
-    ),
     netWorthVariation:
       calculateDashboardNetWorthVariation(monthlyCloses),
     expenseCategories: calculateCategoryTotals({

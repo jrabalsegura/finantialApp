@@ -45,10 +45,10 @@ export default async function Home() {
     netWorth,
     monthlyIncome,
     monthlyExpense,
+    actualMonthlyExpense,
     monthlySavings,
     pendingReimbursements,
     assignedSavings,
-    unassignedMoney,
     netWorthVariation,
     expenseCategories,
     incomeCategories,
@@ -220,9 +220,10 @@ export default async function Home() {
                 helper="Total reservado en partidas"
               />
               <MetricCard
-                label="Dinero no asignado"
-                value={unassignedMoney}
-                helper="Disponible menos partidas asignadas"
+                label="Gastos reales del mes"
+                tone="negative"
+                value={actualMonthlyExpense}
+                helper="Solo movimientos confirmados"
               />
             </section>
 
