@@ -223,8 +223,7 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
       await tx.recurringTransactionOccurrence.update({
         where: { id: transaction.recurringOccurrence.id },
         data: {
-          amount,
-          scheduledDate: date
+          amount
         }
       });
     }

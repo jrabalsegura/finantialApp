@@ -40,8 +40,21 @@ export async function generateRecurringOccurrencesForMonth(
 
   for (const template of templates) {
     const scheduledDates = getScheduledDatesForMonth(template, year, month);
+    const monthlyDateCoveredByShiftedConfirmation =
+      template.frequency === "monthly" && scheduledDates.length === 1
+        ? await reconcileShiftedMonthlyConfirmation(
+            template.id,
+            year,
+            month,
+            scheduledDates[0]
+          )
+        : false;
 
     for (const scheduledDate of scheduledDates) {
+      if (monthlyDateCoveredByShiftedConfirmation) {
+        continue;
+      }
+
       try {
         await prisma.$transaction(async (tx) => {
           const existing =
@@ -95,6 +108,49 @@ export async function generateRecurringOccurrencesForMonth(
       }
     }
   }
+}
+
+async function reconcileShiftedMonthlyConfirmation(
+  recurringTransactionId: string,
+  year: number,
+  month: number,
+  expectedScheduledDate: Date
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const shiftedConfirmedOccurrence =
+      await tx.recurringTransactionOccurrence.findFirst({
+        where: {
+          recurringTransactionId,
+          year,
+          month,
+          status: "confirmed",
+          generatedTransactionId: { not: null },
+          NOT: {
+            scheduledDate: expectedScheduledDate
+          }
+        },
+        select: { id: true }
+      });
+
+    if (!shiftedConfirmedOccurrence) {
+      return false;
+    }
+
+    await tx.recurringTransactionOccurrence.updateMany({
+      where: {
+        recurringTransactionId,
+        year,
+        month,
+        status: "pending",
+        scheduledDate: expectedScheduledDate
+      },
+      data: {
+        status: "skipped"
+      }
+    });
+
+    return true;
+  });
 }
 
 export async function confirmRecurringOccurrence(
@@ -221,7 +277,6 @@ async function confirmRecurringOccurrenceInTransaction(
     where: { id: occurrence.id },
     data: {
       amount,
-      scheduledDate: date,
       status: "confirmed",
       generatedTransactionId: transaction.id
     }
