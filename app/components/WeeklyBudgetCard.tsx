@@ -2,14 +2,36 @@ import Link from "next/link";
 import type { WeeklyBudgetStatus } from "@/domain/weekly-budget";
 import { currencyFormatter } from "@/lib/formatters";
 
+const WEEKLY_VISIBLE_BUDGET_CAP = 500;
+
 export function WeeklyBudgetCard({
   status
 }: {
   status: WeeklyBudgetStatus;
 }) {
-  const progress = Math.min(Math.max(status.percentageUsed ?? 0, 0), 100);
-  const isOverBudget = status.currentWeekDifference < 0;
+  const visibleAvailableBudget = getVisibleAvailableBudget(
+    status.currentWeekAvailableBudget
+  );
+  const visibleWeekDifference = roundMoney(
+    visibleAvailableBudget - status.currentWeekVariableExpense
+  );
+  const visiblePercentageUsed =
+    visibleAvailableBudget > 0
+      ? roundPercentage(
+          (status.currentWeekVariableExpense / visibleAvailableBudget) * 100
+        )
+      : null;
+  const progress = Math.min(Math.max(visiblePercentageUsed ?? 0, 0), 100);
+  const isOverBudget = visibleWeekDifference < 0;
   const hasNegativeMonthlyBudget = status.monthlyVariableBudget < 0;
+  const isVisibleBudgetCapped =
+    status.currentWeekAvailableBudget > visibleAvailableBudget;
+  const message = getVisibleStatusMessage({
+    hasNegativeMonthlyBudget,
+    hasSufficientConfiguration: status.hasSufficientConfiguration,
+    visiblePercentageUsed,
+    visibleWeekDifference
+  });
 
   return (
     <Link
@@ -63,16 +85,16 @@ export function WeeklyBudgetCard({
             <BudgetMetric
               label="Disponible"
               negative={isOverBudget}
-              value={status.currentWeekAvailableBudget}
+              value={visibleAvailableBudget}
             />
             <BudgetMetric
               label={isOverBudget ? "Exceso" : "Restante"}
               negative={isOverBudget}
-              value={Math.abs(status.currentWeekDifference)}
+              value={Math.abs(visibleWeekDifference)}
             />
           </div>
 
-          {status.currentWeekAvailableBudget > 0 ? (
+          {visibleAvailableBudget > 0 ? (
             <div className="mt-5">
               <div
                 className={`h-3 overflow-hidden rounded-full ${
@@ -91,7 +113,7 @@ export function WeeklyBudgetCard({
                   isOverBudget ? "text-rose-800" : "text-emerald-100"
                 }`}
               >
-                {status.percentageUsed?.toLocaleString("es-ES", {
+                {visiblePercentageUsed?.toLocaleString("es-ES", {
                   maximumFractionDigits: 1
                 })}
                 % usado
@@ -106,8 +128,20 @@ export function WeeklyBudgetCard({
                 : "text-white"
             }`}
           >
-            {status.message}
+            {message}
           </p>
+          {isVisibleBudgetCapped ? (
+            <p
+              className={`mt-2 text-xs ${
+                isOverBudget ? "text-rose-800" : "text-emerald-100"
+              }`}
+            >
+              Disponible real por fórmula:{" "}
+              {currencyFormatter.format(status.currentWeekAvailableBudget)}. La
+              card usa un máximo semanal de{" "}
+              {currencyFormatter.format(WEEKLY_VISIBLE_BUDGET_CAP)}.
+            </p>
+          ) : null}
           {status.currentWeekTransferredOutOfAvailable > 0 ? (
             <p
               className={`mt-2 text-xs ${
@@ -133,6 +167,54 @@ export function WeeklyBudgetCard({
       )}
     </Link>
   );
+}
+
+function getVisibleAvailableBudget(currentWeekAvailableBudget: number): number {
+  return Math.min(currentWeekAvailableBudget, WEEKLY_VISIBLE_BUDGET_CAP);
+}
+
+function getVisibleStatusMessage({
+  hasNegativeMonthlyBudget,
+  hasSufficientConfiguration,
+  visiblePercentageUsed,
+  visibleWeekDifference
+}: {
+  hasNegativeMonthlyBudget: boolean;
+  hasSufficientConfiguration: boolean;
+  visiblePercentageUsed: number | null;
+  visibleWeekDifference: number;
+}): string {
+  if (!hasSufficientConfiguration) {
+    return "No hay ingresos fijos recurrentes suficientes para calcular el objetivo semanal.";
+  }
+
+  if (hasNegativeMonthlyBudget) {
+    return "Tus gastos fijos y tu objetivo de ahorro superan los ingresos fijos del mes.";
+  }
+
+  if (visibleWeekDifference < 0) {
+    return `Te has pasado en ${currencyFormatter.format(
+      Math.abs(visibleWeekDifference)
+    )} esta semana.`;
+  }
+
+  if (visiblePercentageUsed !== null && visiblePercentageUsed >= 85) {
+    return `Cuidado: has usado el ${Math.round(
+      visiblePercentageUsed
+    )}% del presupuesto semanal.`;
+  }
+
+  return `Vas bien: te quedan ${currencyFormatter.format(
+    visibleWeekDifference
+  )} esta semana.`;
+}
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function roundPercentage(value: number): number {
+  return Math.round((value + Number.EPSILON) * 10) / 10;
 }
 
 function BudgetMetric({
