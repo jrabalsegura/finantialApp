@@ -10,6 +10,7 @@ import { toMoneyNumber } from "@/domain/financial-calculations";
 import { WeeklyBudgetCard } from "./components/WeeklyBudgetCard";
 import { SavingsGoalProgress } from "./components/SavingsGoalProgress";
 import { ConfirmSubmitButton } from "./components/ConfirmSubmitButton";
+import { RecentTransactionEditDetails } from "./components/RecentTransactionEditDetails";
 import {
   CategoryBreakdownPanel,
   DistributionPanel,
@@ -355,8 +356,14 @@ export default async function Home() {
                   transaction.type === "income" ||
                   transaction.type === "reimbursement_income";
                 const amount = toMoneyNumber(transaction.amount);
-                const manageBlockReason =
-                  getRecentTransactionManageBlockReason(transaction);
+                const editBlockReason =
+                  getRecentTransactionEditBlockReason(transaction);
+                const deleteBlockReason =
+                  getRecentTransactionDeleteBlockReason(transaction);
+                const manageBlockReason = editBlockReason ?? deleteBlockReason;
+                const isConfirmedRecurring = Boolean(
+                  transaction.recurringOccurrence
+                );
 
                 return (
                   <li
@@ -393,26 +400,37 @@ export default async function Home() {
                         >
                           {formatMovementAmount(transaction.type, amount)}
                         </p>
-                        {manageBlockReason ? null : (
-                          <details className="relative text-sm">
-                            <summary
-                              className="icon-action cursor-pointer list-none text-accent hover:border-emerald-200 hover:bg-emerald-50 [&::-webkit-details-marker]:hidden"
-                              title="Editar movimiento"
-                            >
-                              <PencilIcon />
-                              <span className="sr-only">Editar movimiento</span>
-                            </summary>
+                        {editBlockReason ? null : (
+                          <RecentTransactionEditDetails
+                            summary={
+                              <summary
+                                className="icon-action cursor-pointer list-none text-accent hover:border-emerald-200 hover:bg-emerald-50 [&::-webkit-details-marker]:hidden"
+                                title="Editar movimiento"
+                              >
+                                <PencilIcon />
+                                <span className="sr-only">Editar movimiento</span>
+                              </summary>
+                            }
+                          >
                             <div className="absolute right-0 top-full z-20 mt-2 grid w-[min(46rem,calc(100vw-3rem))] gap-3 rounded-lg border border-line bg-surface p-3 text-left shadow-sm">
                               <form
                                 action={updateRecentTransaction}
                                 className="grid gap-3 lg:grid-cols-4"
                               >
                               <input name="id" type="hidden" value={transaction.id} />
+                              {isConfirmedRecurring ? (
+                                <input
+                                  name="type"
+                                  type="hidden"
+                                  value={transaction.type}
+                                />
+                              ) : null}
                               <label className="field-label">
                                 Tipo
                                 <select
                                   className="field-input"
                                   defaultValue={transaction.type}
+                                  disabled={isConfirmedRecurring}
                                   name="type"
                                 >
                                   <option value="expense">Gasto</option>
@@ -520,9 +538,9 @@ export default async function Home() {
                               </button>
                               </form>
                             </div>
-                          </details>
+                          </RecentTransactionEditDetails>
                         )}
-                        {manageBlockReason ? null : (
+                        {deleteBlockReason ? null : (
                           <form action={deleteRecentTransaction}>
                             <input name="id" type="hidden" value={transaction.id} />
                             <ConfirmSubmitButton
@@ -606,7 +624,7 @@ function SavingsBucketsGoalPanel({
   );
 }
 
-function getRecentTransactionManageBlockReason(transaction: {
+function getRecentTransactionEditBlockReason(transaction: {
   monthlyCloseId: string | null;
   originalReimbursement: { id: string } | null;
   recurringOccurrence: { id: string } | null;
@@ -621,10 +639,6 @@ function getRecentTransactionManageBlockReason(transaction: {
     return "Movimiento de reembolso; gestiónalo desde Pendientes de cobrar.";
   }
 
-  if (transaction.recurringOccurrence) {
-    return "Movimiento fijo; gestiónalo desde Movimientos fijos.";
-  }
-
   if (
     transaction.type !== "expense" &&
     transaction.type !== "income" &&
@@ -632,6 +646,22 @@ function getRecentTransactionManageBlockReason(transaction: {
     transaction.type !== "savings_allocation"
   ) {
     return "Este tipo de movimiento no se edita desde recientes.";
+  }
+
+  return null;
+}
+
+function getRecentTransactionDeleteBlockReason(transaction: {
+  monthlyCloseId: string | null;
+  originalReimbursement: { id: string } | null;
+  recurringOccurrence: { id: string } | null;
+  reimbursementId: string | null;
+  type: TransactionType;
+}): string | null {
+  const editBlockReason = getRecentTransactionEditBlockReason(transaction);
+
+  if (editBlockReason) {
+    return editBlockReason;
   }
 
   return null;

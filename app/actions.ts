@@ -156,7 +156,15 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
   const description = parseOptionalString(formData.get("description"));
 
   await prisma.$transaction(async (tx) => {
-    const transaction = await getEditableTransaction(tx, id);
+    const transaction = await getEditableTransaction(tx, id, {
+      allowConfirmedRecurring: true
+    });
+
+    if (transaction.recurringOccurrence && type !== transaction.type) {
+      throw new Error(
+        "No se puede cambiar el tipo de un movimiento fijo confirmado."
+      );
+    }
 
     await reverseEditableTransaction(tx, transaction);
 
@@ -210,6 +218,16 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
         }
       });
     }
+
+    if (transaction.recurringOccurrence) {
+      await tx.recurringTransactionOccurrence.update({
+        where: { id: transaction.recurringOccurrence.id },
+        data: {
+          amount,
+          scheduledDate: date
+        }
+      });
+    }
   });
 
   revalidateTransactionViews();
@@ -219,9 +237,22 @@ export async function deleteRecentTransaction(formData: FormData): Promise<void>
   const id = parseRequiredString(formData.get("id"));
 
   await prisma.$transaction(async (tx) => {
-    const transaction = await getEditableTransaction(tx, id);
+    const transaction = await getEditableTransaction(tx, id, {
+      allowConfirmedRecurring: true
+    });
 
     await reverseEditableTransaction(tx, transaction);
+
+    if (transaction.recurringOccurrence) {
+      await tx.recurringTransactionOccurrence.update({
+        where: { id: transaction.recurringOccurrence.id },
+        data: {
+          generatedTransactionId: null,
+          status: "skipped"
+        }
+      });
+    }
+
     await tx.transaction.delete({ where: { id } });
   });
 
@@ -1333,7 +1364,8 @@ type EditableTransaction = Prisma.TransactionGetPayload<{
 
 async function getEditableTransaction(
   tx: Prisma.TransactionClient,
-  id: string
+  id: string,
+  options: { allowConfirmedRecurring?: boolean } = {}
 ): Promise<EditableTransaction> {
   const transaction = await tx.transaction.findUnique({
     where: { id },
@@ -1355,7 +1387,7 @@ async function getEditableTransaction(
     throw new Error("Gestiona los reembolsos desde su pantalla específica.");
   }
 
-  if (transaction.recurringOccurrence) {
+  if (transaction.recurringOccurrence && !options.allowConfirmedRecurring) {
     throw new Error("Gestiona los movimientos fijos desde su pantalla específica.");
   }
 
