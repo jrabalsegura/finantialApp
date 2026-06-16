@@ -13,6 +13,7 @@ const primaryItems = [
 
 const secondaryItems = [
   { href: "/savings", label: "Partidas" },
+  { href: "/categories", label: "Categorías" },
   { href: "/reimbursements", label: "Pendientes" },
   { href: "/recurring", label: "Fijos" },
   { href: "/quick-templates", label: "Accesos rápidos" },
