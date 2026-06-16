@@ -8,6 +8,8 @@ import {
   parseMoneyInput
 } from "@/domain/money";
 import { currencyFormatter } from "@/lib/formatters";
+import { getBucketGoalProgress } from "@/domain/savings-goals";
+import { SavingsGoalProgress } from "./SavingsGoalProgress";
 
 type MonthlyCloseAccount = {
   calculatedBalance: number;
@@ -22,6 +24,7 @@ type MonthlyCloseBucket = {
   id: string;
   isLongTerm: boolean;
   name: string;
+  targetAmount: number | null;
 };
 
 type AdjustmentKind =
@@ -278,33 +281,67 @@ export function MonthlyCloseForm({
         {buckets.length > 0 ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {buckets.map((bucket) => (
-                <label
-                  className="grid gap-2 rounded-lg border border-line bg-surface p-3 text-sm font-medium text-ink"
-                  key={bucket.id}
-                >
-                  <span>
-                    {bucket.name}
-                    <span className="block text-xs font-normal text-muted">
-                      Actual: {currencyFormatter.format(bucket.currentAmount)}
-                    </span>
-                  </span>
-                  <input
-                    className="field-input"
-                    min="0"
-                    name={`savingsAllocation_${bucket.id}`}
-                    onChange={(event) =>
-                      setAllocations((current) => ({
-                        ...current,
-                        [bucket.id]: event.target.value
-                      }))
-                    }
-                    step="0.01"
-                    type="number"
-                    value={allocations[bucket.id]}
-                  />
-                </label>
-              ))}
+              {buckets.map((bucket) => {
+                const allocationAmount = parseInputAmount(
+                  allocations[bucket.id]
+                );
+                const projectedProgress = getBucketGoalProgress({
+                  currentAmount: bucket.currentAmount + allocationAmount,
+                  targetAmount: bucket.targetAmount
+                });
+
+                return (
+                  <div
+                    className="grid gap-3 rounded-lg border border-line bg-surface p-3 text-sm text-ink"
+                    key={bucket.id}
+                  >
+                    <SavingsGoalProgress
+                      bucket={{
+                        currentAmount: bucket.currentAmount,
+                        name: bucket.name,
+                        targetAmount: bucket.targetAmount
+                      }}
+                      compact
+                      showName
+                    />
+                    {allocationAmount > 0 && projectedProgress.hasGoal ? (
+                      <p className="rounded-lg bg-white px-3 py-2 text-xs text-muted">
+                        Si asignas {currencyFormatter.format(allocationAmount)}:
+                        nuevo saldo{" "}
+                        {currencyFormatter.format(
+                          projectedProgress.currentAmount
+                        )}{" "}
+                        /{" "}
+                        {currencyFormatter.format(
+                          projectedProgress.targetAmount ?? 0
+                        )}
+                        {" · "}
+                        {formatPercentage(
+                          Math.max(projectedProgress.percentage ?? 0, 0)
+                        )}{" "}
+                        cubierto.
+                      </p>
+                    ) : null}
+                    <label className="grid gap-2 font-medium">
+                      Asignar en este cierre
+                      <input
+                        className="field-input"
+                        min="0"
+                        name={`savingsAllocation_${bucket.id}`}
+                        onChange={(event) =>
+                          setAllocations((current) => ({
+                            ...current,
+                            [bucket.id]: event.target.value
+                          }))
+                        }
+                        step="0.01"
+                        type="number"
+                        value={allocations[bucket.id]}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <Metric label="A repartir" value={Math.max(estimatedMonthlySavings, 0)} />
@@ -433,4 +470,11 @@ function parseInputAmount(value: string | undefined): number {
 
 function roundMoney(value: number): number {
   return normalizeMoney(value);
+}
+
+function formatPercentage(value: number): string {
+  return `${new Intl.NumberFormat("es-ES", {
+    maximumFractionDigits: value >= 100 ? 2 : 1,
+    minimumFractionDigits: 0
+  }).format(value)}%`;
 }

@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
 import {
-  allocateToSavingsBucket,
   createSavingsBucket,
   deleteSavingsBucket,
-  updateSavingsBucket,
-  withdrawFromSavingsBucket
+  transferBetweenSavingsBuckets,
+  updateSavingsBucket
 } from "../actions";
 import { prisma } from "@/lib/prisma";
 import {
@@ -19,6 +18,7 @@ import {
   currencyFormatter,
   formatDateInputValue
 } from "@/lib/formatters";
+import { SavingsGoalProgress } from "../components/SavingsGoalProgress";
 
 export const dynamic = "force-dynamic";
 
@@ -49,10 +49,6 @@ export default async function SavingsPage() {
     })
   ]);
 
-  const defaultAccount =
-    accounts.find((account) => account.name === "Openbank principal") ??
-    accounts.find((account) => account.isDefault) ??
-    accounts[0];
   const availableMoney = calculateAvailableMoney(accounts);
   const assignedMoney = calculateAssignedSavings(savingsBuckets);
   const unassignedMoney = calculateUnassignedAvailableMoney(
@@ -79,6 +75,76 @@ export default async function SavingsPage() {
           <Metric label="Dinero asignado" value={assignedMoney} />
           <Metric label="Dinero no asignado" value={unassignedMoney} />
         </section>
+
+        {savingsBuckets.length >= 2 ? (
+          <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+            <h2 className="text-lg font-semibold text-ink">
+              Transferir entre partidas
+            </h2>
+            <form
+              action={transferBetweenSavingsBuckets}
+              className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px] lg:items-end"
+            >
+              <label className="field-label">
+                Origen
+                <select className="field-input" name="sourceBucketId" required>
+                  <option value="">Elige partida</option>
+                  {savingsBuckets.map((bucket) => (
+                    <option key={bucket.id} value={bucket.id}>
+                      {bucket.name} ·{" "}
+                      {currencyFormatter.format(
+                        toMoneyNumber(bucket.currentAmount)
+                      )}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field-label">
+                Destino
+                <select
+                  className="field-input"
+                  name="destinationBucketId"
+                  required
+                >
+                  <option value="">Elige partida</option>
+                  {savingsBuckets.map((bucket) => (
+                    <option key={bucket.id} value={bucket.id}>
+                      {bucket.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field-label">
+                Importe
+                <input
+                  className="field-input"
+                  inputMode="decimal"
+                  min="0.01"
+                  name="amount"
+                  required
+                  step="0.01"
+                  type="number"
+                />
+              </label>
+
+              <label className="field-label lg:col-span-2">
+                Nota opcional
+                <input
+                  className="field-input"
+                  name="description"
+                  placeholder="Ej. Reequilibrio de objetivos"
+                  type="text"
+                />
+              </label>
+
+              <button className="primary-button" type="submit">
+                Transferir
+              </button>
+            </form>
+          </section>
+        ) : null}
 
         <section className="rounded-lg border border-line bg-white shadow-sm">
           <div className="border-b border-line px-4 py-3 sm:px-5">
@@ -111,93 +177,18 @@ export default async function SavingsPage() {
                             </span>
                           ) : null}
                         </div>
-                        <p className="text-sm text-muted">
-                          {targetAmount
-                            ? `${currencyFormatter.format(amount)} de ${currencyFormatter.format(targetAmount)}`
-                            : "Sin objetivo definido"}
-                        </p>
                       </div>
-                        <p className="amount-text text-lg font-semibold text-ink sm:text-right">
+                      <p className="amount-text text-lg font-semibold text-ink sm:text-right">
                         {currencyFormatter.format(amount)}
                       </p>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <form
-                        action={allocateToSavingsBucket}
-                        className="grid gap-3 rounded-lg border border-line bg-surface p-3"
-                      >
-                        <input
-                          name="savingsBucketId"
-                          type="hidden"
-                          value={bucket.id}
-                        />
-                        <input
-                          name="accountId"
-                          type="hidden"
-                          value={defaultAccount?.id ?? ""}
-                        />
-                        <label className="field-label">
-                          Asignar importe
-                          <input
-                            className="field-input"
-                            inputMode="decimal"
-                            min="0.01"
-                            name="amount"
-                            required
-                            step="0.01"
-                            type="number"
-                          />
-                        </label>
-                        <input
-                          className="field-input"
-                          name="description"
-                          placeholder="Descripción opcional"
-                          type="text"
-                        />
-                        <button className="primary-button" type="submit">
-                          Asignar
-                        </button>
-                      </form>
-
-                      <form
-                        action={withdrawFromSavingsBucket}
-                        className="grid gap-3 rounded-lg border border-line bg-surface p-3"
-                      >
-                        <input
-                          name="savingsBucketId"
-                          type="hidden"
-                          value={bucket.id}
-                        />
-                        <input
-                          name="accountId"
-                          type="hidden"
-                          value={defaultAccount?.id ?? ""}
-                        />
-                        <label className="field-label">
-                          Retirar importe
-                          <input
-                            className="field-input"
-                            inputMode="decimal"
-                            max={formatPlainAmount(amount)}
-                            min="0.01"
-                            name="amount"
-                            required
-                            step="0.01"
-                            type="number"
-                          />
-                        </label>
-                        <input
-                          className="field-input"
-                          name="description"
-                          placeholder="Descripción opcional"
-                          type="text"
-                        />
-                        <button className="primary-button" type="submit">
-                          Retirar
-                        </button>
-                      </form>
-                    </div>
+                    <SavingsGoalProgress
+                      bucket={{
+                        currentAmount: amount,
+                        targetAmount
+                      }}
+                    />
 
                     <form action={updateSavingsBucket} className="grid gap-4">
                       <input name="id" type="hidden" value={bucket.id} />
@@ -246,7 +237,7 @@ export default async function SavingsPage() {
         <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
           <h2 className="text-lg font-semibold text-ink">Crear partida</h2>
           <form action={createSavingsBucket} className="mt-4 grid gap-4">
-            <SavingsBucketFields />
+            <SavingsBucketFields mode="create" />
             <button className="primary-button" type="submit">
               Guardar partida
             </button>
@@ -258,7 +249,8 @@ export default async function SavingsPage() {
 }
 
 function SavingsBucketFields({
-  bucket
+  bucket,
+  mode = "edit"
 }: {
   bucket?: {
     currentAmount: number;
@@ -269,6 +261,7 @@ function SavingsBucketFields({
     targetAmount: number | null;
     targetDate: Date | null;
   };
+  mode?: "create" | "edit";
 }) {
   return (
     <>
@@ -284,17 +277,14 @@ function SavingsBucketFields({
           />
         </label>
 
-        <label className="field-label">
-          Importe asignado
-          <input
-            className="field-input"
-            defaultValue={formatPlainAmount(bucket?.currentAmount ?? 0)}
-            inputMode="decimal"
-            name="currentAmount"
-            step="0.01"
-            type="number"
-          />
-        </label>
+        {mode === "edit" ? (
+          <div className="grid gap-2 text-sm font-medium text-ink">
+            <span>Importe asignado</span>
+            <span className="amount-text flex min-h-12 items-center rounded-lg border border-line bg-surface px-3 py-2 text-base">
+              {currencyFormatter.format(bucket?.currentAmount ?? 0)}
+            </span>
+          </div>
+        ) : null}
 
         <label className="field-label">
           Objetivo
@@ -307,6 +297,7 @@ function SavingsBucketFields({
                 : formatPlainAmount(bucket.targetAmount)
             }
             inputMode="decimal"
+            min="0"
             name="targetAmount"
             step="0.01"
             type="number"

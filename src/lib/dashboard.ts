@@ -121,6 +121,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         name: true,
         currentAmount: true,
         isLongTerm: true,
+        priority: true,
         targetAmount: true
       }
     }),

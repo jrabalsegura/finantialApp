@@ -473,8 +473,9 @@ export async function deleteAccount(formData: FormData): Promise<void> {
 
 export async function createSavingsBucket(formData: FormData): Promise<void> {
   const name = parseRequiredString(formData.get("name"));
-  const currentAmount = parseAmountAllowingZero(formData.get("currentAmount"));
-  const targetAmount = parseOptionalAmount(formData.get("targetAmount"));
+  const targetAmount = parseOptionalNonNegativeAmount(
+    formData.get("targetAmount")
+  );
   const targetDate = parseOptionalDate(formData.get("targetDate"));
   const priority = parseOptionalInteger(formData.get("priority"));
   const isLongTerm = parseCheckbox(formData.get("isLongTerm"));
@@ -483,7 +484,7 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
   await prisma.savingsBucket.create({
     data: {
       name,
-      currentAmount,
+      currentAmount: 0,
       targetAmount,
       targetDate,
       priority,
@@ -498,8 +499,9 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
 export async function updateSavingsBucket(formData: FormData): Promise<void> {
   const id = parseRequiredString(formData.get("id"));
   const name = parseRequiredString(formData.get("name"));
-  const currentAmount = parseAmountAllowingZero(formData.get("currentAmount"));
-  const targetAmount = parseOptionalAmount(formData.get("targetAmount"));
+  const targetAmount = parseOptionalNonNegativeAmount(
+    formData.get("targetAmount")
+  );
   const targetDate = parseOptionalDate(formData.get("targetDate"));
   const priority = parseOptionalInteger(formData.get("priority"));
   const isLongTerm = parseCheckbox(formData.get("isLongTerm"));
@@ -509,7 +511,6 @@ export async function updateSavingsBucket(formData: FormData): Promise<void> {
     where: { id },
     data: {
       name,
-      currentAmount,
       targetAmount,
       targetDate,
       priority,
@@ -551,20 +552,72 @@ export async function deleteSavingsBucket(formData: FormData): Promise<void> {
   revalidateSavingsViews();
 }
 
-export async function allocateToSavingsBucket(formData: FormData): Promise<void> {
-  const savingsBucketId = parseRequiredString(formData.get("savingsBucketId"));
-  const accountId = parseRequiredString(formData.get("accountId"));
+export async function transferBetweenSavingsBuckets(
+  formData: FormData
+): Promise<void> {
+  const sourceBucketId = parseRequiredString(formData.get("sourceBucketId"));
+  const destinationBucketId = parseRequiredString(
+    formData.get("destinationBucketId")
+  );
   const amount = parseAmount(formData.get("amount"));
-  const description =
-    parseOptionalString(formData.get("description")) ?? "Asignación a ahorro";
-  const impact = getDefaultTransactionImpact("savings_allocation");
+  const description = parseOptionalString(formData.get("description"));
+
+  if (sourceBucketId === destinationBucketId) {
+    throw new Error("Elige dos partidas distintas para transferir.");
+  }
 
   await prisma.$transaction(async (tx) => {
-    await assertAccountExists(tx, accountId);
-    await assertSavingsBucketExists(tx, savingsBucketId);
+    const [sourceBucket, destinationBucket, defaultAccount] = await Promise.all([
+      tx.savingsBucket.findUnique({
+        where: { id: sourceBucketId },
+        select: {
+          currentAmount: true,
+          id: true,
+          name: true
+        }
+      }),
+      tx.savingsBucket.findUnique({
+        where: { id: destinationBucketId },
+        select: {
+          id: true,
+          name: true
+        }
+      }),
+      tx.account.findFirst({
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        select: { id: true }
+      })
+    ]);
+
+    if (!sourceBucket || !destinationBucket) {
+      throw new Error("La partida de ahorro seleccionada no existe.");
+    }
+
+    if (!defaultAccount) {
+      throw new Error("No hay cuenta disponible para registrar la transferencia.");
+    }
+
+    if (amount > toMoneyNumber(sourceBucket.currentAmount)) {
+      throw new Error("No hay suficiente saldo en la partida de origen.");
+    }
+
+    const withdrawalImpact = getDefaultTransactionImpact("savings_withdrawal");
+    const allocationImpact = getDefaultTransactionImpact("savings_allocation");
+    const transferDescription =
+      description ??
+      `Transferencia entre partidas: ${sourceBucket.name} -> ${destinationBucket.name}`;
 
     await tx.savingsBucket.update({
-      where: { id: savingsBucketId },
+      where: { id: sourceBucket.id },
+      data: {
+        currentAmount: {
+          decrement: amount
+        }
+      }
+    });
+
+    await tx.savingsBucket.update({
+      where: { id: destinationBucket.id },
       data: {
         currentAmount: {
           increment: amount
@@ -576,56 +629,15 @@ export async function allocateToSavingsBucket(formData: FormData): Promise<void>
       data: {
         date: new Date(),
         amount,
-        type: "savings_allocation",
-        description,
-        accountId,
-        savingsBucketId,
-        affectsRealBalance: impact.affectsRealBalance,
-        affectsPersonalExpense: impact.affectsPersonalExpense,
-        affectsPersonalIncome: impact.affectsPersonalIncome,
-        affectsMonthlySavings: impact.affectsMonthlySavings,
-        affectsNetWorth: impact.affectsNetWorth
-      }
-    });
-  });
-
-  revalidateSavingsViews();
-}
-
-export async function withdrawFromSavingsBucket(
-  formData: FormData
-): Promise<void> {
-  const savingsBucketId = parseRequiredString(formData.get("savingsBucketId"));
-  const accountId = parseRequiredString(formData.get("accountId"));
-  const amount = parseAmount(formData.get("amount"));
-  const description =
-    parseOptionalString(formData.get("description")) ?? "Retirada de ahorro";
-  const impact = getDefaultTransactionImpact("savings_withdrawal");
-
-  await prisma.$transaction(async (tx) => {
-    await assertAccountExists(tx, accountId);
-
-    const savingsBucket = await tx.savingsBucket.findUnique({
-      where: { id: savingsBucketId },
-      select: {
-        currentAmount: true
-      }
-    });
-
-    if (!savingsBucket) {
-      throw new Error("La partida de ahorro no existe.");
-    }
-
-    if (amount > toMoneyNumber(savingsBucket.currentAmount)) {
-      throw new Error("No hay suficiente dinero asignado en la partida.");
-    }
-
-    await tx.savingsBucket.update({
-      where: { id: savingsBucketId },
-      data: {
-        currentAmount: {
-          decrement: amount
-        }
+        type: "savings_withdrawal",
+        description: transferDescription,
+        accountId: defaultAccount.id,
+        savingsBucketId: sourceBucket.id,
+        affectsRealBalance: withdrawalImpact.affectsRealBalance,
+        affectsPersonalExpense: withdrawalImpact.affectsPersonalExpense,
+        affectsPersonalIncome: withdrawalImpact.affectsPersonalIncome,
+        affectsMonthlySavings: withdrawalImpact.affectsMonthlySavings,
+        affectsNetWorth: withdrawalImpact.affectsNetWorth
       }
     });
 
@@ -633,15 +645,15 @@ export async function withdrawFromSavingsBucket(
       data: {
         date: new Date(),
         amount,
-        type: "savings_withdrawal",
-        description,
-        accountId,
-        savingsBucketId,
-        affectsRealBalance: impact.affectsRealBalance,
-        affectsPersonalExpense: impact.affectsPersonalExpense,
-        affectsPersonalIncome: impact.affectsPersonalIncome,
-        affectsMonthlySavings: impact.affectsMonthlySavings,
-        affectsNetWorth: impact.affectsNetWorth
+        type: "savings_allocation",
+        description: transferDescription,
+        accountId: defaultAccount.id,
+        savingsBucketId: destinationBucket.id,
+        affectsRealBalance: allocationImpact.affectsRealBalance,
+        affectsPersonalExpense: allocationImpact.affectsPersonalExpense,
+        affectsPersonalIncome: allocationImpact.affectsPersonalIncome,
+        affectsMonthlySavings: allocationImpact.affectsMonthlySavings,
+        affectsNetWorth: allocationImpact.affectsNetWorth
       }
     });
   });
@@ -1144,12 +1156,26 @@ function parseAmountAllowingZero(value: FormDataEntryValue | null): number {
   return amount;
 }
 
-function parseOptionalAmount(value: FormDataEntryValue | null): number | null {
+function parseNonNegativeAmountAllowingZero(
+  value: FormDataEntryValue | null
+): number {
+  const amount = parseAmountAllowingZero(value);
+
+  if (amount < 0) {
+    throw new Error("El importe no puede ser negativo.");
+  }
+
+  return amount;
+}
+
+function parseOptionalNonNegativeAmount(
+  value: FormDataEntryValue | null
+): number | null {
   if (typeof value !== "string" || value.trim().length === 0) {
     return null;
   }
 
-  const amount = parseAmount(value);
+  const amount = parseNonNegativeAmountAllowingZero(value);
 
   return amount;
 }
@@ -1251,20 +1277,6 @@ async function assertCategoryMatchesType(
 
   if (category.type !== "both" && category.type !== type) {
     throw new Error("La categoría no corresponde al tipo de movimiento.");
-  }
-}
-
-async function assertSavingsBucketExists(
-  tx: Prisma.TransactionClient,
-  savingsBucketId: string
-): Promise<void> {
-  const savingsBucket = await tx.savingsBucket.findUnique({
-    where: { id: savingsBucketId },
-    select: { id: true }
-  });
-
-  if (!savingsBucket) {
-    throw new Error("La partida de ahorro no existe.");
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, type KeyboardEvent } from "react";
 import {
   createFirstUser,
   loginUser,
@@ -22,8 +22,21 @@ export function LoginForm({
   const action = hasUsers ? loginUser : createFirstUser;
   const [state, formAction, isPending] = useActionState(action, INITIAL_STATE);
 
+  function handleKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    if (event.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.requestSubmit();
+  }
+
   return (
-    <form action={formAction} className="grid gap-4">
+    <form action={formAction} className="grid gap-4" onKeyDown={handleKeyDown}>
       <input name="next" type="hidden" value={nextPath} />
 
       <label className="field-label">

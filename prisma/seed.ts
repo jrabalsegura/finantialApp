@@ -100,15 +100,40 @@ const categories: CategorySeed[] = [
 ];
 
 const savingsBuckets = [
-  { name: "Fondo de reserva", priority: 1, isLongTerm: false },
-  { name: "Largo plazo", priority: 2, isLongTerm: true },
-  { name: "Hipoteca / coche", priority: 3, isLongTerm: false },
-  { name: "Incidencias piso", priority: 4, isLongTerm: false },
-  { name: "Vacaciones", priority: 5, isLongTerm: false },
-  { name: "IRPF y gastos", priority: 6, isLongTerm: false },
-  { name: "Seguros", priority: 7, isLongTerm: false },
-  { name: "Dentista", priority: 8, isLongTerm: false },
-  { name: "Ahorro efectivo del mes", priority: 9, isLongTerm: false }
+  {
+    name: "Fondo de reserva",
+    priority: 1,
+    isLongTerm: false,
+    targetAmount: 10000
+  },
+  { name: "Largo plazo", priority: 2, isLongTerm: true, targetAmount: null },
+  {
+    name: "Hipoteca / coche",
+    priority: 3,
+    isLongTerm: false,
+    targetAmount: 50000
+  },
+  {
+    name: "Incidencias piso",
+    priority: 4,
+    isLongTerm: false,
+    targetAmount: null
+  },
+  { name: "Vacaciones", priority: 5, isLongTerm: false, targetAmount: 3000 },
+  {
+    name: "IRPF y gastos",
+    priority: 6,
+    isLongTerm: false,
+    targetAmount: 1500
+  },
+  { name: "Seguros", priority: 7, isLongTerm: false, targetAmount: null },
+  { name: "Dentista", priority: 8, isLongTerm: false, targetAmount: 800 },
+  {
+    name: "Ahorro efectivo del mes",
+    priority: 9,
+    isLongTerm: false,
+    targetAmount: null
+  }
 ];
 
 async function main() {
@@ -132,12 +157,15 @@ async function main() {
   }
 
   for (const bucket of savingsBuckets) {
+    const { targetAmount, ...bucketData } = bucket;
+
     await prisma.savingsBucket.upsert({
       where: { name: bucket.name },
-      update: bucket,
+      update: bucketData,
       create: {
         currentAmount: 0,
-        ...bucket
+        targetAmount,
+        ...bucketData
       }
     });
   }

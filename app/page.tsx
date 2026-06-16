@@ -4,6 +4,7 @@ import { createQuickTransaction } from "./actions";
 import { QuickTransactionForm } from "./components/QuickTransactionForm";
 import { toMoneyNumber } from "@/domain/financial-calculations";
 import { WeeklyBudgetCard } from "./components/WeeklyBudgetCard";
+import { SavingsGoalProgress } from "./components/SavingsGoalProgress";
 import {
   CategoryBreakdownPanel,
   DistributionPanel,
@@ -18,6 +19,7 @@ import {
   monthYearFormatter as monthFormatter,
   shortDateFormatter as dateFormatter
 } from "@/lib/formatters";
+import { getBucketGoalProgress } from "@/domain/savings-goals";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,45 @@ export default async function Home() {
     quickTemplateOptions,
     reimbursementOptions
   } = await getDashboardData(today);
+  const goalBuckets = savingsBuckets
+    .map((bucket) => ({
+      ...bucket,
+      currentAmountNumber: toMoneyNumber(bucket.currentAmount),
+      targetAmountNumber:
+        bucket.targetAmount == null ? null : toMoneyNumber(bucket.targetAmount)
+    }))
+    .filter((bucket) =>
+      getBucketGoalProgress({
+        currentAmount: bucket.currentAmountNumber,
+        targetAmount: bucket.targetAmountNumber
+      }).hasGoal
+    )
+    .sort((left, right) => {
+      const leftPriority = left.priority ?? Number.MAX_SAFE_INTEGER;
+      const rightPriority = right.priority ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      const leftPercentage =
+        getBucketGoalProgress({
+          currentAmount: left.currentAmountNumber,
+          targetAmount: left.targetAmountNumber
+        }).percentage ?? Number.MAX_SAFE_INTEGER;
+      const rightPercentage =
+        getBucketGoalProgress({
+          currentAmount: right.currentAmountNumber,
+          targetAmount: right.targetAmountNumber
+        }).percentage ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftPercentage !== rightPercentage) {
+        return leftPercentage - rightPercentage;
+      }
+
+      return left.name.localeCompare(right.name, "es");
+    });
+  const dashboardGoalBuckets = goalBuckets.slice(0, 4);
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -175,6 +216,45 @@ export default async function Home() {
               />
             </section>
 
+            <section className="rounded-lg border border-line bg-white shadow-sm">
+              <div className="grid gap-3 border-b border-line px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
+                <div>
+                  <h2 className="text-lg font-semibold text-ink">
+                    Objetivos de ahorro
+                  </h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {goalBuckets.length} partidas con objetivo configurado
+                  </p>
+                </div>
+                <Link className="nav-link" href="/savings">
+                  Ver todas las partidas
+                </Link>
+              </div>
+              {dashboardGoalBuckets.length > 0 ? (
+                <ul className="divide-y divide-line">
+                  {dashboardGoalBuckets.map((bucket) => (
+                    <li key={bucket.id}>
+                      <SavingsGoalProgress
+                        bucket={{
+                          currentAmount: bucket.currentAmountNumber,
+                          name: bucket.name,
+                          targetAmount: bucket.targetAmountNumber
+                        }}
+                        className="px-4 py-4 sm:px-5"
+                        compact
+                        href={`/savings/${bucket.id}`}
+                        showName
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="px-4 py-8 text-sm text-muted sm:px-5">
+                  Todavía no hay objetivos configurados en las partidas.
+                </div>
+              )}
+            </section>
+
             <section className="grid gap-4 xl:grid-cols-2">
               <CategoryBreakdownPanel
                 emptyText="No hay gastos personales este mes."
@@ -211,16 +291,17 @@ export default async function Home() {
                 }))}
                 title="Distribución por cuentas"
               />
-              <DistributionPanel
-                emptyText="No hay partidas de ahorro."
-                items={savingsBuckets.map((bucket) => ({
+              <SavingsBucketsGoalPanel
+                buckets={savingsBuckets.map((bucket) => ({
+                  currentAmount: toMoneyNumber(bucket.currentAmount),
                   href: `/savings/${bucket.id}`,
                   id: bucket.id,
-                  label: bucket.name,
-                  value: toMoneyNumber(bucket.currentAmount),
-                  detail: bucket.isLongTerm ? "Largo plazo" : "Corto/medio plazo"
+                  name: bucket.name,
+                  targetAmount:
+                    bucket.targetAmount == null
+                      ? null
+                      : toMoneyNumber(bucket.targetAmount)
                 }))}
-                title="Distribución por partidas de ahorro"
               />
             </section>
           </section>
@@ -316,6 +397,51 @@ export default async function Home() {
 
 function getTodayInputValue(): string {
   return formatDateInputValue(new Date());
+}
+
+function SavingsBucketsGoalPanel({
+  buckets
+}: {
+  buckets: Array<{
+    currentAmount: number;
+    href: string;
+    id: string;
+    name: string;
+    targetAmount: number | null;
+  }>;
+}) {
+  return (
+    <section className="rounded-lg border border-line bg-white shadow-sm">
+      <div className="border-b border-line px-4 py-3 sm:px-5">
+        <h2 className="text-lg font-semibold text-ink">
+          Progreso por partidas de ahorro
+        </h2>
+      </div>
+      {buckets.length > 0 ? (
+        <ul className="divide-y divide-line">
+          {buckets.map((bucket) => (
+            <li key={bucket.id}>
+              <SavingsGoalProgress
+                bucket={{
+                  currentAmount: bucket.currentAmount,
+                  name: bucket.name,
+                  targetAmount: bucket.targetAmount
+                }}
+                className="px-4 py-4 sm:px-5"
+                compact
+                href={bucket.href}
+                showName
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="px-4 py-8 text-sm text-muted sm:px-5">
+          No hay partidas de ahorro.
+        </div>
+      )}
+    </section>
+  );
 }
 
 function formatMovementRoute(transaction: {

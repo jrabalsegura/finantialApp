@@ -77,7 +77,8 @@ export default async function MonthlyClosePage({
         id: true,
         name: true,
         currentAmount: true,
-        isLongTerm: true
+        isLongTerm: true,
+        targetAmount: true
       }
     }),
     prisma.transaction.findMany({
@@ -236,7 +237,10 @@ export default async function MonthlyClosePage({
               currentAmount: toMoneyNumber(bucket.currentAmount),
               id: bucket.id,
               isLongTerm: bucket.isLongTerm,
-              name: bucket.name
+              name: bucket.name,
+              targetAmount: bucket.targetAmount
+                ? toMoneyNumber(bucket.targetAmount)
+                : null
             }))}
             month={selectedPeriod.month}
             totalExpense={totalExpense}
