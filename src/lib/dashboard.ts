@@ -29,6 +29,7 @@ const recentTransactionSelect = {
   affectsPersonalExpense: true,
   affectsPersonalIncome: true,
   affectsRealBalance: true,
+  excludeFromWeeklyBudget: true,
   amount: true,
   categoryId: true,
   createdAt: true,

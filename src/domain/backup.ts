@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 4;
+export const BACKUP_SCHEMA_VERSION = 5;
 export const BACKUP_APP_NAME = "Finanzas personales";
 
 const ACCOUNT_TYPES = [
@@ -121,6 +121,7 @@ export type BackupTransaction = TimestampedRecord & {
   affectsPersonalIncome: boolean;
   affectsMonthlySavings: boolean;
   affectsNetWorth: boolean;
+  excludeFromWeeklyBudget: boolean;
   reimbursementId: string | null;
 };
 
@@ -497,6 +498,11 @@ function validateTransaction(value: unknown, path: string, errors: string[]) {
     errors
   );
   validateBoolean(value.affectsNetWorth, `${path}.affectsNetWorth`, errors);
+  validateBoolean(
+    value.excludeFromWeeklyBudget,
+    `${path}.excludeFromWeeklyBudget`,
+    errors
+  );
   validateOptionalString(
     value.reimbursementId,
     `${path}.reimbursementId`,

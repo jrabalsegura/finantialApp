@@ -71,6 +71,7 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
         type: true,
         description: true,
         affectsPersonalExpense: true,
+        excludeFromWeeklyBudget: true,
         account: {
           select: {
             name: true,

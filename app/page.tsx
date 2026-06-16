@@ -381,6 +381,11 @@ export default async function Home() {
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
                           {TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
+                        {transaction.excludeFromWeeklyBudget ? (
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+                            Fuera del objetivo semanal
+                          </span>
+                        ) : null}
                       </div>
                       <p className="text-sm text-muted">
                         {formatMovementRoute(transaction)} ·{" "}
@@ -533,6 +538,17 @@ export default async function Home() {
                                   name="description"
                                   type="text"
                                 />
+                              </label>
+                              <label className="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium text-ink lg:col-span-4">
+                                <input
+                                  className="h-4 w-4 accent-emerald-700"
+                                  defaultChecked={
+                                    transaction.excludeFromWeeklyBudget
+                                  }
+                                  name="excludeFromWeeklyBudget"
+                                  type="checkbox"
+                                />
+                                No contar en objetivo semanal
                               </label>
                               <button className="primary-button lg:col-span-2" type="submit">
                                 Guardar cambios

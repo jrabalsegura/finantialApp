@@ -154,6 +154,8 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
       ? parseRequiredString(formData.get("savingsBucketId"))
       : null;
   const description = parseOptionalString(formData.get("description"));
+  const excludeFromWeeklyBudget =
+    formData.get("excludeFromWeeklyBudget") === "on";
 
   await prisma.$transaction(async (tx) => {
     const transaction = await getEditableTransaction(tx, id, {
@@ -201,6 +203,7 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
         date,
         description,
         destinationAccountId,
+        excludeFromWeeklyBudget,
         savingsBucketId,
         type
       }

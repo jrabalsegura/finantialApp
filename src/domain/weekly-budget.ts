@@ -36,6 +36,7 @@ export type VariableExpenseForBudget = {
   amount: MoneyValue;
   type: TransactionType;
   affectsPersonalExpense: boolean;
+  excludeFromWeeklyBudget?: boolean;
   recurringOccurrenceId?: string | null;
   isPending?: boolean;
   sourceAccountIncludeInAvailableMoney?: boolean;
@@ -384,6 +385,10 @@ function isVariableExpense(
     "includePendingTransactions" | "includeReimbursableExpenses"
   >
 ): boolean {
+  if (transaction.excludeFromWeeklyBudget) {
+    return false;
+  }
+
   if (transaction.isPending && !setting.includePendingTransactions) {
     return false;
   }
@@ -407,6 +412,10 @@ function isAvailabilityReducingTransfer(
   transaction: VariableExpenseForBudget,
   setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
 ): boolean {
+  if (transaction.excludeFromWeeklyBudget) {
+    return false;
+  }
+
   if (transaction.isPending && !setting.includePendingTransactions) {
     return false;
   }

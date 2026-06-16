@@ -75,6 +75,7 @@ function createValidBackup(): FinancialBackup {
           affectsPersonalIncome: false,
           affectsMonthlySavings: true,
           affectsNetWorth: true,
+          excludeFromWeeklyBudget: false,
           reimbursementId: null,
           createdAt: timestamp,
           updatedAt: timestamp

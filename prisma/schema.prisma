@@ -158,24 +158,25 @@ model BudgetSetting {
 }
 
 model Transaction {
-  id                     String          @id @default(cuid())
-  date                   DateTime        @default(now())
-  amount                 Decimal
-  type                   TransactionType
-  description            String?
-  accountId              String
-  destinationAccountId   String?
-  categoryId             String?
-  savingsBucketId        String?
-  monthlyCloseId         String?
-  affectsRealBalance     Boolean         @default(true)
-  affectsPersonalExpense Boolean         @default(false)
-  affectsPersonalIncome  Boolean         @default(false)
-  affectsMonthlySavings  Boolean         @default(false)
-  affectsNetWorth        Boolean         @default(true)
-  reimbursementId        String?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
+  id                      String          @id @default(cuid())
+  date                    DateTime        @default(now())
+  amount                  Decimal
+  type                    TransactionType
+  description             String?
+  accountId               String
+  destinationAccountId    String?
+  categoryId              String?
+  savingsBucketId         String?
+  monthlyCloseId          String?
+  affectsRealBalance      Boolean         @default(true)
+  affectsPersonalExpense  Boolean         @default(false)
+  affectsPersonalIncome   Boolean         @default(false)
+  affectsMonthlySavings   Boolean         @default(false)
+  affectsNetWorth         Boolean         @default(true)
+  excludeFromWeeklyBudget Boolean         @default(false)
+  reimbursementId         String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
   account               Account                         @relation("TransactionAccount", fields: [accountId], references: [id])
   destinationAccount    Account?                        @relation("TransactionDestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)

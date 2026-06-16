@@ -111,6 +111,35 @@ test("solo las transferencias desde disponible hacia no disponible reducen el pr
   );
 });
 
+test("excluye movimientos marcados del objetivo semanal", () => {
+  const transactions: VariableExpenseForBudget[] = [
+    expense("regular", 80, "2026-06-10"),
+    {
+      ...expense("extra-expense", 300, "2026-06-10"),
+      excludeFromWeeklyBudget: true
+    },
+    {
+      ...transfer("extra-transfer", 500, true, false, "2026-06-10"),
+      excludeFromWeeklyBudget: true
+    }
+  ];
+  const status = getWeeklyBudgetStatus({
+    recurringTransactions,
+    transactions,
+    setting,
+    referenceDate: new Date(2026, 5, 10, 12)
+  });
+
+  assert.equal(status.monthlyVariableExpense, 80);
+  assert.equal(status.monthlyTransferredOutOfAvailable, 0);
+  assert.equal(status.currentWeekVariableExpense, 80);
+  assert.deepEqual(
+    status.variableExpensesForWeek.map((transaction) => transaction.id),
+    ["regular"]
+  );
+  assert.deepEqual(status.availabilityReducingTransfersForWeek, []);
+});
+
 test("la semana empieza en lunes y se limita al mes actual", () => {
   const transactions = [
     expense("sunday-before", 10, "2026-05-31"),
