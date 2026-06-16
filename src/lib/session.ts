@@ -1,6 +1,16 @@
 export const SESSION_COOKIE_NAME = "financial_app_session";
 export const SESSION_DURATION_SECONDS = 60 * 60;
 
+export function getSessionCookieOptions() {
+  return {
+    httpOnly: true,
+    maxAge: SESSION_DURATION_SECONDS,
+    path: "/",
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production"
+  };
+}
+
 export type SessionPayload = {
   exp: number;
   iat: number;

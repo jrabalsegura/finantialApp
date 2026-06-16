@@ -25,7 +25,7 @@ export default async function LoginPage({
           </h1>
           <p className="text-sm leading-6 text-muted">
             {hasUsers
-              ? "Introduce tus credenciales para abrir la app durante la próxima hora."
+              ? "Introduce tus credenciales para abrir la app. La sesión caduca tras 60 minutos sin actividad."
               : "No hay usuarios configurados todavía. Crea el primero para proteger la app."}
           </p>
         </header>

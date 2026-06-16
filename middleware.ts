@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import {
+  createSessionToken,
+  getSessionCookieOptions,
+  SESSION_COOKIE_NAME,
+  verifySessionToken
+} from "@/lib/session";
 
 const PUBLIC_PATH_PREFIXES = ["/_next", "/favicon.ico", "/login"];
 
@@ -15,7 +20,16 @@ export async function middleware(request: NextRequest) {
   );
 
   if (session) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    const refreshedToken = await createSessionToken(session.userId);
+
+    response.cookies.set(
+      SESSION_COOKIE_NAME,
+      refreshedToken,
+      getSessionCookieOptions()
+    );
+
+    return response;
   }
 
   const loginUrl = new URL("/login", request.url);

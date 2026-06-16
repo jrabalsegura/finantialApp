@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
   createSessionToken,
+  getSessionCookieOptions,
   SESSION_COOKIE_NAME,
-  SESSION_DURATION_SECONDS,
   verifySessionToken
 } from "@/lib/session";
 
@@ -12,13 +12,7 @@ export async function createUserSession(userId: string): Promise<void> {
   const token = await createSessionToken(userId);
   const cookieStore = await cookies();
 
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    maxAge: SESSION_DURATION_SECONDS,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production"
-  });
+  cookieStore.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
 }
 
 export async function clearUserSession(): Promise<void> {

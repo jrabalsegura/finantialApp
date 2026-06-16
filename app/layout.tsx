@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AppNavbar } from "./components/AppNavbar";
 import { NumberInputWheelGuard } from "./components/NumberInputWheelGuard";
+import { SessionActivityRefresher } from "./components/SessionActivityRefresher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <NumberInputWheelGuard />
+        <SessionActivityRefresher />
         <AppNavbar />
         {children}
       </body>
