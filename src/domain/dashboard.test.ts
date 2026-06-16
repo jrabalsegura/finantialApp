@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateCategoryTotals,
-  calculateDashboardNetWorthVariation
+  calculateDashboardNetWorthVariation,
+  calculateProjectedMonthlyCashflow,
+  type PendingRecurringOccurrenceForDashboard
 } from "./dashboard";
 
 test("agrupa movimientos personales por categoría y ordena por importe", () => {
@@ -65,6 +67,38 @@ test("calcula la variación entre los dos últimos cierres mostrados", () => {
     null
   );
 });
+
+test("proyecta el ahorro mensual con ingresos y gastos fijos pendientes", () => {
+  const cashflow = calculateProjectedMonthlyCashflow({
+    actualIncome: 500,
+    actualExpense: 60,
+    recurringOccurrences: [
+      recurringOccurrence(2000, "income", "pending"),
+      recurringOccurrence(900, "expense", "pending"),
+      recurringOccurrence(300, "transfer", "pending"),
+      recurringOccurrence(100, "savings_allocation", "pending"),
+      recurringOccurrence(80, "expense", "confirmed")
+    ]
+  });
+
+  assert.deepEqual(cashflow, {
+    income: 2500,
+    expense: 960,
+    savings: 1540
+  });
+});
+
+function recurringOccurrence(
+  amount: number,
+  type: PendingRecurringOccurrenceForDashboard["recurringTransaction"]["type"],
+  status: string
+): PendingRecurringOccurrenceForDashboard {
+  return {
+    amount,
+    status,
+    recurringTransaction: { type }
+  };
+}
 
 function transaction(
   amount: number,

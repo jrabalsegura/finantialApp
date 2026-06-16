@@ -187,13 +187,13 @@ export default async function Home() {
                 label="Ingresos del mes"
                 tone="positive"
                 value={monthlyIncome}
-                helper="Solo ingresos personales reales"
+                helper="Reales y fijos pendientes del mes"
               />
               <MetricCard
                 label="Gastos del mes"
                 tone="negative"
                 value={monthlyExpense}
-                helper="Solo gastos personales reales"
+                helper="Reales y fijos pendientes del mes"
               />
             </div>
 
@@ -202,7 +202,7 @@ export default async function Home() {
                 label="Ahorro mensual"
                 tone={monthlySavings >= 0 ? "positive" : "negative"}
                 value={monthlySavings}
-                helper="Ingresos reales menos gastos reales del mes"
+                helper="Ingresos menos gastos previstos del mes"
               />
               <NetWorthVariationCard variation={netWorthVariation} />
             </section>

@@ -1,7 +1,9 @@
 import {
   calculateNetWorthVariation,
+  getDefaultTransactionImpact,
   toMoneyNumber,
-  type MoneyValue
+  type MoneyValue,
+  type TransactionType
 } from "./financial-calculations";
 
 export const UNCATEGORIZED_CATEGORY_ID = "sin-categoria";
@@ -25,6 +27,23 @@ export type CategoryTransaction = {
 export type DashboardNetWorthVariation = {
   amount: number;
   label: string;
+};
+
+export type PendingRecurringOccurrenceForDashboard = {
+  amount: MoneyValue;
+  status: string;
+  recurringTransaction: {
+    type: Extract<
+      TransactionType,
+      "expense" | "income" | "transfer" | "savings_allocation"
+    >;
+  };
+};
+
+export type ProjectedMonthlyCashflow = {
+  expense: number;
+  income: number;
+  savings: number;
 };
 
 export function calculateCategoryTotals({
@@ -101,6 +120,44 @@ export function calculateDashboardNetWorthVariation(
   return {
     amount,
     label: `${formatCloseMonth(previousClose)} → ${formatCloseMonth(latestClose)}`
+  };
+}
+
+export function calculateProjectedMonthlyCashflow({
+  actualExpense,
+  actualIncome,
+  recurringOccurrences
+}: {
+  actualExpense: MoneyValue;
+  actualIncome: MoneyValue;
+  recurringOccurrences: PendingRecurringOccurrenceForDashboard[];
+}): ProjectedMonthlyCashflow {
+  let income = toMoneyNumber(actualIncome);
+  let expense = toMoneyNumber(actualExpense);
+
+  for (const occurrence of recurringOccurrences) {
+    if (occurrence.status !== "pending") {
+      continue;
+    }
+
+    const impact = getDefaultTransactionImpact(
+      occurrence.recurringTransaction.type
+    );
+    const amount = toMoneyNumber(occurrence.amount);
+
+    if (impact.affectsPersonalIncome) {
+      income += amount;
+    }
+
+    if (impact.affectsPersonalExpense) {
+      expense += amount;
+    }
+  }
+
+  return {
+    expense: toMoneyNumber(expense),
+    income: toMoneyNumber(income),
+    savings: toMoneyNumber(income - expense)
   };
 }
 

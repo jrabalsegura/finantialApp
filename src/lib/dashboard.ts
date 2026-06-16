@@ -1,6 +1,7 @@
 import {
   calculateCategoryTotals,
-  calculateDashboardNetWorthVariation
+  calculateDashboardNetWorthVariation,
+  calculateProjectedMonthlyCashflow
 } from "@/domain/dashboard";
 import {
   calculateAssignedSavings,
@@ -10,7 +11,6 @@ import {
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
-  calculateRealMonthlySavings,
   calculateUnassignedAvailableMoney,
   getMonthDateRange,
   toMoneyNumber
@@ -208,6 +208,21 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
   const manualSavingsBuckets = displaySavingsBuckets.filter(
     (bucket) => !bucket.isLongTerm
   );
+  const actualMonthlyIncome = calculateRealMonthlyIncome(
+    monthlyTransactions,
+    currentYear,
+    currentMonth
+  );
+  const actualMonthlyExpense = calculateRealMonthlyExpense(
+    monthlyTransactions,
+    currentYear,
+    currentMonth
+  );
+  const projectedMonthlyCashflow = calculateProjectedMonthlyCashflow({
+    actualExpense: actualMonthlyExpense,
+    actualIncome: actualMonthlyIncome,
+    recurringOccurrences
+  });
 
   return {
     currentMonth,
@@ -221,21 +236,9 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     defaultAccountId: defaultAccount?.id ?? null,
     availableMoney: calculateAvailableMoney(accounts),
     netWorth: calculateNetWorth(accounts, reimbursements),
-    monthlyIncome: calculateRealMonthlyIncome(
-      monthlyTransactions,
-      currentYear,
-      currentMonth
-    ),
-    monthlyExpense: calculateRealMonthlyExpense(
-      monthlyTransactions,
-      currentYear,
-      currentMonth
-    ),
-    monthlySavings: calculateRealMonthlySavings(
-      monthlyTransactions,
-      currentYear,
-      currentMonth
-    ),
+    monthlyIncome: projectedMonthlyCashflow.income,
+    monthlyExpense: projectedMonthlyCashflow.expense,
+    monthlySavings: projectedMonthlyCashflow.savings,
     pendingReimbursements: calculatePendingReimbursements(reimbursements),
     assignedSavings: calculateAssignedSavings(manualSavingsBuckets),
     unassignedMoney: calculateUnassignedAvailableMoney(
