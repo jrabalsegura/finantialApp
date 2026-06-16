@@ -1,10 +1,15 @@
 import Link from "next/link";
 import type { TransactionType } from "@prisma/client";
-import { createQuickTransaction } from "./actions";
+import {
+  createQuickTransaction,
+  deleteRecentTransaction,
+  updateRecentTransaction
+} from "./actions";
 import { QuickTransactionForm } from "./components/QuickTransactionForm";
 import { toMoneyNumber } from "@/domain/financial-calculations";
 import { WeeklyBudgetCard } from "./components/WeeklyBudgetCard";
 import { SavingsGoalProgress } from "./components/SavingsGoalProgress";
+import { ConfirmSubmitButton } from "./components/ConfirmSubmitButton";
 import {
   CategoryBreakdownPanel,
   DistributionPanel,
@@ -20,6 +25,7 @@ import {
   shortDateFormatter as dateFormatter
 } from "@/lib/formatters";
 import { getBucketGoalProgress } from "@/domain/savings-goals";
+import { formatPlainAmount } from "@/domain/money";
 
 export const dynamic = "force-dynamic";
 
@@ -349,6 +355,8 @@ export default async function Home() {
                   transaction.type === "income" ||
                   transaction.type === "reimbursement_income";
                 const amount = toMoneyNumber(transaction.amount);
+                const manageBlockReason =
+                  getRecentTransactionManageBlockReason(transaction);
 
                 return (
                   <li
@@ -372,17 +380,168 @@ export default async function Home() {
                       </p>
                     </div>
 
-                    <p
-                      className={`amount-text text-lg font-semibold sm:text-right ${
-                        isOutflow
-                          ? "text-rose-700"
-                          : isInflow
-                            ? "text-emerald-700"
-                            : "text-ink"
-                      }`}
-                    >
-                      {formatMovementAmount(transaction.type, amount)}
-                    </p>
+                    <div className="grid gap-2 justify-items-end">
+                      <div className="flex items-center gap-2">
+                        <p
+                          className={`amount-text text-lg font-semibold sm:text-right ${
+                            isOutflow
+                              ? "text-rose-700"
+                              : isInflow
+                                ? "text-emerald-700"
+                                : "text-ink"
+                          }`}
+                        >
+                          {formatMovementAmount(transaction.type, amount)}
+                        </p>
+                        {manageBlockReason ? null : (
+                          <details className="relative text-sm">
+                            <summary
+                              className="icon-action cursor-pointer list-none text-accent hover:border-emerald-200 hover:bg-emerald-50 [&::-webkit-details-marker]:hidden"
+                              title="Editar movimiento"
+                            >
+                              <PencilIcon />
+                              <span className="sr-only">Editar movimiento</span>
+                            </summary>
+                            <div className="absolute right-0 top-full z-20 mt-2 grid w-[min(46rem,calc(100vw-3rem))] gap-3 rounded-lg border border-line bg-surface p-3 text-left shadow-sm">
+                              <form
+                                action={updateRecentTransaction}
+                                className="grid gap-3 lg:grid-cols-4"
+                              >
+                              <input name="id" type="hidden" value={transaction.id} />
+                              <label className="field-label">
+                                Tipo
+                                <select
+                                  className="field-input"
+                                  defaultValue={transaction.type}
+                                  name="type"
+                                >
+                                  <option value="expense">Gasto</option>
+                                  <option value="income">Ingreso</option>
+                                  <option value="transfer">Transferencia</option>
+                                  <option value="savings_allocation">
+                                    Asignación a ahorro
+                                  </option>
+                                </select>
+                              </label>
+                              <label className="field-label">
+                                Importe
+                                <input
+                                  className="field-input"
+                                  defaultValue={formatPlainAmount(amount)}
+                                  inputMode="decimal"
+                                  min="0.01"
+                                  name="amount"
+                                  required
+                                  step="0.01"
+                                  type="number"
+                                />
+                              </label>
+                              <label className="field-label">
+                                Fecha
+                                <input
+                                  className="field-input"
+                                  defaultValue={formatDateInputValue(transaction.date)}
+                                  name="date"
+                                  required
+                                  type="date"
+                                />
+                              </label>
+                              <label className="field-label">
+                                Cuenta
+                                <select
+                                  className="field-input"
+                                  defaultValue={transaction.account.id}
+                                  name="accountId"
+                                  required
+                                >
+                                  {accounts.map((account) => (
+                                    <option key={account.id} value={account.id}>
+                                      {account.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field-label">
+                                Destino
+                                <select
+                                  className="field-input"
+                                  defaultValue={transaction.destinationAccount?.id ?? ""}
+                                  name="destinationAccountId"
+                                >
+                                  <option value="">Sin destino</option>
+                                  {accounts.map((account) => (
+                                    <option key={account.id} value={account.id}>
+                                      {account.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field-label">
+                                Categoría
+                                <select
+                                  className="field-input"
+                                  defaultValue={transaction.category?.id ?? ""}
+                                  name="categoryId"
+                                >
+                                  <option value="">Sin categoría</option>
+                                  {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field-label">
+                                Partida
+                                <select
+                                  className="field-input"
+                                  defaultValue={transaction.savingsBucketId ?? ""}
+                                  name="savingsBucketId"
+                                >
+                                  <option value="">Sin partida</option>
+                                  {manualSavingsBuckets.map((bucket) => (
+                                    <option key={bucket.id} value={bucket.id}>
+                                      {bucket.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field-label">
+                                Descripción
+                                <input
+                                  className="field-input"
+                                  defaultValue={transaction.description ?? ""}
+                                  name="description"
+                                  type="text"
+                                />
+                              </label>
+                              <button className="primary-button lg:col-span-2" type="submit">
+                                Guardar cambios
+                              </button>
+                              </form>
+                            </div>
+                          </details>
+                        )}
+                        {manageBlockReason ? null : (
+                          <form action={deleteRecentTransaction}>
+                            <input name="id" type="hidden" value={transaction.id} />
+                            <ConfirmSubmitButton
+                              className="icon-action text-rose-700 hover:border-rose-200 hover:bg-rose-50"
+                              confirmMessage="¿Eliminar este movimiento y revertir su efecto?"
+                              title="Eliminar movimiento"
+                            >
+                              <TrashIcon />
+                              <span className="sr-only">Eliminar movimiento</span>
+                            </ConfirmSubmitButton>
+                          </form>
+                        )}
+                      </div>
+                      {manageBlockReason ? (
+                        <p className="text-xs font-medium text-muted">
+                          {manageBlockReason}
+                        </p>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}
@@ -447,6 +606,37 @@ function SavingsBucketsGoalPanel({
   );
 }
 
+function getRecentTransactionManageBlockReason(transaction: {
+  monthlyCloseId: string | null;
+  originalReimbursement: { id: string } | null;
+  recurringOccurrence: { id: string } | null;
+  reimbursementId: string | null;
+  type: TransactionType;
+}): string | null {
+  if (transaction.monthlyCloseId) {
+    return "Incluido en un cierre mensual; no se edita desde recientes.";
+  }
+
+  if (transaction.originalReimbursement || transaction.reimbursementId) {
+    return "Movimiento de reembolso; gestiónalo desde Pendientes de cobrar.";
+  }
+
+  if (transaction.recurringOccurrence) {
+    return "Movimiento fijo; gestiónalo desde Movimientos fijos.";
+  }
+
+  if (
+    transaction.type !== "expense" &&
+    transaction.type !== "income" &&
+    transaction.type !== "transfer" &&
+    transaction.type !== "savings_allocation"
+  ) {
+    return "Este tipo de movimiento no se edita desde recientes.";
+  }
+
+  return null;
+}
+
 function formatMovementRoute(transaction: {
   account: { name: string };
   destinationAccount: { name: string } | null;
@@ -475,6 +665,45 @@ function formatMovementAmount(
   }
 
   return currencyFormatter.format(amount);
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
+  );
 }
 
 function capitalize(value: string): string {

@@ -64,21 +64,47 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     prisma.transaction.findMany({
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 12,
-      include: {
+      select: {
+        id: true,
+        accountId: true,
+        affectsMonthlySavings: true,
+        affectsNetWorth: true,
+        affectsPersonalExpense: true,
+        affectsPersonalIncome: true,
+        affectsRealBalance: true,
+        amount: true,
+        categoryId: true,
+        createdAt: true,
+        date: true,
+        description: true,
+        destinationAccountId: true,
+        monthlyCloseId: true,
+        reimbursementId: true,
+        savingsBucketId: true,
+        type: true,
         account: {
           select: {
+            id: true,
             name: true
           }
         },
         destinationAccount: {
           select: {
+            id: true,
             name: true
           }
         },
         category: {
           select: {
+            id: true,
             name: true
           }
+        },
+        originalReimbursement: {
+          select: { id: true }
+        },
+        recurringOccurrence: {
+          select: { id: true }
         }
       }
     }),

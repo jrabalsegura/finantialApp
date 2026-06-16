@@ -6,6 +6,7 @@ import {
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
   calculateRealMonthlySavings,
+  calculateLongTermTransferAllocation,
   getMonthDateRange,
   toMoneyNumber
 } from "@/domain/financial-calculations";
@@ -94,7 +95,21 @@ export default async function MonthlyClosePage({
         }
       },
       select: {
+        account: {
+          select: {
+            includeInMonthlySavings: true,
+            includeInNetWorth: true,
+            type: true
+          }
+        },
         date: true,
+        destinationAccount: {
+          select: {
+            includeInMonthlySavings: true,
+            includeInNetWorth: true,
+            type: true
+          }
+        },
         amount: true,
         type: true,
         affectsPersonalExpense: true,
@@ -169,6 +184,8 @@ export default async function MonthlyClosePage({
     selectedPeriod.year,
     selectedPeriod.month
   );
+  const longTermTransferAllocation =
+    calculateLongTermTransferAllocation(monthlyTransactions);
   const monthLabel = capitalize(
     monthFormatter.format(
       new Date(selectedPeriod.year, selectedPeriod.month - 1, 1)
@@ -257,6 +274,7 @@ export default async function MonthlyClosePage({
                 ? toMoneyNumber(bucket.targetAmount)
                 : null
             }))}
+            longTermTransferAllocation={longTermTransferAllocation}
             month={selectedPeriod.month}
             totalExpense={totalExpense}
             totalIncome={totalIncome}

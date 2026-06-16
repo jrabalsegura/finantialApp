@@ -5,6 +5,7 @@ import {
   calculateAssignedSavings,
   calculateLongTermBucketAdjustment,
   calculateLongTermBucketBalance,
+  calculateLongTermTransferAllocation,
   calculateNetWorth,
   calculateNetWorthVariation,
   calculatePendingReimbursements,
@@ -17,6 +18,7 @@ import {
   applyBucketReductions,
   createMonthlyBucketSnapshots,
   getDefaultTransactionImpact,
+  getManualMonthlyCloseResult,
   getMonthlyCloseResult,
   isTransactionInMonth,
   transactionAffectsMonthlySavings,
@@ -215,6 +217,64 @@ test("clasifica el resultado del cierre mensual", () => {
     deficit: 300,
     kind: "negative",
     monthlySavings: -300,
+    surplus: 0
+  });
+});
+
+test("calcula el ahorro automatico asignado a largo plazo", () => {
+  const availableAccount = {
+    includeInMonthlySavings: true,
+    includeInNetWorth: true,
+    type: "checking"
+  };
+  const longTermAccount = {
+    includeInMonthlySavings: false,
+    includeInNetWorth: true,
+    type: "investment"
+  };
+
+  assert.equal(
+    calculateLongTermTransferAllocation([
+      {
+        account: availableAccount,
+        amount: 300,
+        destinationAccount: longTermAccount,
+        type: "transfer"
+      },
+      {
+        account: longTermAccount,
+        amount: 50,
+        destinationAccount: availableAccount,
+        type: "transfer"
+      },
+      {
+        account: availableAccount,
+        amount: 25,
+        destinationAccount: availableAccount,
+        type: "transfer"
+      }
+    ]),
+    250
+  );
+});
+
+test("descuenta el ahorro automatico de largo plazo del reparto manual", () => {
+  assert.deepEqual(getManualMonthlyCloseResult(1484.94, 360), {
+    deficit: 0,
+    kind: "positive",
+    monthlySavings: 1124.94,
+    surplus: 1124.94
+  });
+  assert.deepEqual(getManualMonthlyCloseResult(100, 300), {
+    deficit: 0,
+    kind: "zero",
+    monthlySavings: 0,
+    surplus: 0
+  });
+  assert.deepEqual(getManualMonthlyCloseResult(-200, 300), {
+    deficit: 200,
+    kind: "negative",
+    monthlySavings: -200,
     surplus: 0
   });
 });

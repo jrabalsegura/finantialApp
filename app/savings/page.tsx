@@ -303,7 +303,19 @@ function SavingsBucketFields({
               {currencyFormatter.format(bucket?.currentAmount ?? 0)}
             </span>
           </div>
-        ) : null}
+        ) : (
+          <label className="field-label">
+            Saldo inicial
+            <input
+              className="field-input"
+              inputMode="decimal"
+              min="0"
+              name="currentAmount"
+              step="0.01"
+              type="number"
+            />
+          </label>
+        )}
 
         <label className="field-label">
           Objetivo

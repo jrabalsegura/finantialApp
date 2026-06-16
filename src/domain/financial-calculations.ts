@@ -55,6 +55,19 @@ export type TransactionForCalculations = {
   affectsNetWorth: boolean;
 };
 
+export type LongTermTransferForCalculations = {
+  account: Pick<
+    AccountForLongTermBucketAdjustment,
+    "includeInMonthlySavings" | "includeInNetWorth" | "type"
+  >;
+  amount: MoneyValue;
+  destinationAccount: Pick<
+    AccountForLongTermBucketAdjustment,
+    "includeInMonthlySavings" | "includeInNetWorth" | "type"
+  > | null;
+  type: TransactionType;
+};
+
 export type ReimbursementForCalculations = {
   id: string;
   title: string;
@@ -321,6 +334,53 @@ export function calculateLongTermBucketBalance(
       )
       .map((account) => account.currentBalance)
   );
+}
+
+export function calculateLongTermTransferAllocation(
+  transactions: LongTermTransferForCalculations[]
+): number {
+  return sumMoney(
+    transactions.map((transaction) => {
+      if (transaction.type !== "transfer" || !transaction.destinationAccount) {
+        return 0;
+      }
+
+      const sourceFeedsLongTerm = accountFeedsLongTermBucket(
+        transaction.account
+      );
+      const destinationFeedsLongTerm = accountFeedsLongTermBucket(
+        transaction.destinationAccount
+      );
+
+      if (!sourceFeedsLongTerm && destinationFeedsLongTerm) {
+        return transaction.amount;
+      }
+
+      if (sourceFeedsLongTerm && !destinationFeedsLongTerm) {
+        return -toMoneyNumber(transaction.amount);
+      }
+
+      return 0;
+    })
+  );
+}
+
+export function getManualMonthlyCloseResult(
+  monthlySavings: MoneyValue,
+  automaticLongTermSavings: MoneyValue
+): MonthlyCloseResult {
+  const result = getMonthlyCloseResult(monthlySavings);
+
+  if (result.kind !== "positive") {
+    return result;
+  }
+
+  const manualSurplus = Math.max(
+    result.surplus - Math.max(toMoneyNumber(automaticLongTermSavings), 0),
+    0
+  );
+
+  return getMonthlyCloseResult(manualSurplus);
 }
 
 export function getMonthlyCloseResult(monthlySavings: MoneyValue): MonthlyCloseResult {

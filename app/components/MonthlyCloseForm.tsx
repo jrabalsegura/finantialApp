@@ -14,6 +14,7 @@ import {
   accountFeedsLongTermBucket,
   calculateLongTermBucketAdjustment,
   calculateLongTermBucketBalance,
+  getManualMonthlyCloseResult,
   getMonthlyCloseResult
 } from "@/domain/financial-calculations";
 
@@ -46,6 +47,7 @@ type MonthlyCloseFormProps = {
   action: typeof closeMonth;
   baseMonthlySavings: number;
   buckets: MonthlyCloseBucket[];
+  longTermTransferAllocation: number;
   month: number;
   totalExpense: number;
   totalIncome: number;
@@ -62,6 +64,7 @@ export function MonthlyCloseForm({
   action,
   baseMonthlySavings,
   buckets,
+  longTermTransferAllocation,
   month,
   totalExpense,
   totalIncome,
@@ -152,6 +155,13 @@ export function MonthlyCloseForm({
       type: account.type
     }))
   );
+  const automaticLongTermSavings = roundMoney(
+    longTermTransferAllocation + longTermBucketAdjustment
+  );
+  const manualCloseResult = getManualMonthlyCloseResult(
+    estimatedMonthlySavings,
+    automaticLongTermSavings
+  );
   const allocationTotal = roundMoney(
     manualBuckets.reduce(
       (total, bucket) => total + parseInputAmount(allocations[bucket.id]),
@@ -159,7 +169,7 @@ export function MonthlyCloseForm({
     )
   );
   const allocationRemaining = roundMoney(
-    closeResult.surplus - allocationTotal
+    manualCloseResult.surplus - allocationTotal
   );
   const reductionTotal = roundMoney(
     manualBuckets.reduce(
@@ -183,8 +193,8 @@ export function MonthlyCloseForm({
   );
   const hasInvalidAllocation =
     allocationTotal < 0 ||
-    (closeResult.kind === "positive"
-      ? allocationTotal !== closeResult.surplus
+    (manualCloseResult.kind === "positive"
+      ? allocationTotal !== manualCloseResult.surplus
       : allocationTotal > 0);
   const hasInvalidReduction =
     reductionTotal < 0 ||
@@ -359,18 +369,20 @@ export function MonthlyCloseForm({
       <section className="rounded-lg border border-line bg-white shadow-sm">
         <StepHeader
           step="7"
-          title={getBucketStepTitle(closeResult.kind)}
-          text={getBucketStepText(closeResult.kind)}
+          title={getBucketStepTitle(manualCloseResult.kind)}
+          text={getBucketStepText(manualCloseResult.kind)}
         />
         {longTermBucket ? (
           <DerivedLongTermBucket
             adjustment={longTermBucketAdjustment}
+            automaticSavings={automaticLongTermSavings}
             bucketName={longTermBucket?.name ?? "Largo plazo"}
             currentAmount={currentLongTermBucketBalance}
             finalAmount={finalLongTermBucketBalance}
+            transferAllocation={longTermTransferAllocation}
           />
         ) : null}
-        {manualBuckets.length > 0 && closeResult.kind === "positive" ? (
+        {manualBuckets.length > 0 && manualCloseResult.kind === "positive" ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {manualBuckets.map((bucket) => {
@@ -436,7 +448,7 @@ export function MonthlyCloseForm({
               })}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Metric label="A repartir" value={closeResult.surplus} />
+              <Metric label="A repartir" value={manualCloseResult.surplus} />
               <Metric label="Repartido" value={allocationTotal} />
               <Metric label="Restante" value={allocationRemaining} />
             </div>
@@ -447,7 +459,7 @@ export function MonthlyCloseForm({
               </p>
             ) : null}
           </div>
-        ) : manualBuckets.length > 0 && closeResult.kind === "negative" ? (
+        ) : manualBuckets.length > 0 && manualCloseResult.kind === "negative" ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
               <p className="font-semibold">
@@ -555,10 +567,10 @@ export function MonthlyCloseForm({
               </p>
             ) : null}
           </div>
-        ) : closeResult.kind === "zero" ? (
+        ) : manualCloseResult.kind === "zero" ? (
           <div className="px-4 py-8 text-sm text-muted sm:px-5">
-            El ahorro mensual estimado es cero. No hay sobrante que repartir ni
-            déficit que cubrir.
+            No hay ahorro pendiente de repartir manualmente ni déficit que
+            cubrir.
           </div>
         ) : (
           <div className="px-4 py-8 text-sm text-muted sm:px-5">
@@ -650,14 +662,18 @@ function BucketAmount({
 
 function DerivedLongTermBucket({
   adjustment,
+  automaticSavings,
   bucketName,
   currentAmount,
-  finalAmount
+  finalAmount,
+  transferAllocation
 }: {
   adjustment: number;
+  automaticSavings: number;
   bucketName: string;
   currentAmount: number;
   finalAmount: number;
+  transferAllocation: number;
 }) {
   const tone =
     adjustment > 0
@@ -680,6 +696,16 @@ function DerivedLongTermBucket({
         <p className="mt-1">
           Calculado: {currencyFormatter.format(currentAmount)} · Final:{" "}
           {currencyFormatter.format(finalAmount)}
+        </p>
+        <p className="mt-1">
+          Ya asignado a Largo plazo este mes:{" "}
+          {currencyFormatter.format(Math.max(automaticSavings, 0))}
+          {transferAllocation !== 0 ? (
+            <>
+              {" "}
+              ({currencyFormatter.format(transferAllocation)} por transferencias)
+            </>
+          ) : null}
         </p>
       </div>
       <label className="grid gap-2 text-sm font-medium text-ink">

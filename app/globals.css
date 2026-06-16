@@ -129,6 +129,23 @@ a {
   opacity: 0.45;
 }
 
+.icon-action {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dedbd2;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: currentColor;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
 .nav-link {
   border: 1px solid #dedbd2;
   background: #ffffff;

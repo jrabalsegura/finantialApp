@@ -6,7 +6,9 @@ import type { AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   accountFeedsLongTermBucket,
+  calculateLongTermBucketAdjustment,
   calculateLongTermBucketBalance,
+  calculateLongTermTransferAllocation,
   createMonthlyBucketSnapshots,
   calculateAvailableMoney,
   calculateNetWorth,
@@ -14,6 +16,7 @@ import {
   calculateRealMonthlyIncome,
   calculateRealMonthlySavings,
   getDefaultTransactionImpact,
+  getManualMonthlyCloseResult,
   getMonthDateRange,
   toMoneyNumber,
   validateNegativeBucketReductions,
@@ -25,6 +28,7 @@ import {
 } from "@/domain/domain-options";
 import {
   getConvertReimbursementToExpenseRules,
+  getQuickTransactionRules,
   getReimbursementTransactionRules,
   type QuickTransactionType
 } from "@/domain/transaction-rules";
@@ -61,6 +65,12 @@ const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS = new Set<MonthlyCloseAdjustmentKind>
   "unassigned_savings"
 ]);
 const VALID_ACCOUNT_TYPES = new Set<AccountType>(ACCOUNT_TYPES);
+const EDITABLE_TRANSACTION_TYPES = new Set<QuickTransactionType>([
+  "expense",
+  "income",
+  "transfer",
+  "savings_allocation"
+]);
 
 export async function createQuickTransaction(
   _previousState: TransactionFormState,
@@ -123,6 +133,99 @@ export async function createQuickTransaction(
           : "No se pudo guardar el movimiento."
     };
   }
+}
+
+export async function updateRecentTransaction(formData: FormData): Promise<void> {
+  const id = parseRequiredString(formData.get("id"));
+  const type = parseEditableTransactionType(formData.get("type"));
+  const amount = parseAmount(formData.get("amount"));
+  const date = parseTransactionDate(formData.get("date"));
+  const accountId = parseRequiredString(formData.get("accountId"));
+  const destinationAccountId =
+    type === "transfer"
+      ? parseRequiredString(formData.get("destinationAccountId"))
+      : null;
+  const categoryId =
+    type === "expense" || type === "income"
+      ? parseOptionalString(formData.get("categoryId"))
+      : null;
+  const savingsBucketId =
+    type === "savings_allocation"
+      ? parseRequiredString(formData.get("savingsBucketId"))
+      : null;
+  const description = parseOptionalString(formData.get("description"));
+
+  await prisma.$transaction(async (tx) => {
+    const transaction = await getEditableTransaction(tx, id);
+
+    await reverseEditableTransaction(tx, transaction);
+
+    const rules = getQuickTransactionRules({
+      type,
+      amount,
+      accountId,
+      destinationAccountId,
+      savingsBucketId
+    });
+
+    await assertAccountExists(tx, accountId);
+    if (destinationAccountId) {
+      await assertAccountExists(tx, destinationAccountId);
+    }
+    if (categoryId && (type === "expense" || type === "income")) {
+      await assertCategoryMatchesType(tx, categoryId, type);
+    }
+    if (savingsBucketId) {
+      await assertEditableSavingsBucketExists(tx, savingsBucketId);
+    }
+
+    await tx.transaction.update({
+      where: { id },
+      data: {
+        accountId,
+        affectsMonthlySavings: rules.impact.affectsMonthlySavings,
+        affectsNetWorth: rules.impact.affectsNetWorth,
+        affectsPersonalExpense: rules.impact.affectsPersonalExpense,
+        affectsPersonalIncome: rules.impact.affectsPersonalIncome,
+        affectsRealBalance: rules.impact.affectsRealBalance,
+        amount,
+        categoryId,
+        date,
+        description,
+        destinationAccountId,
+        savingsBucketId,
+        type
+      }
+    });
+
+    await applyBalanceDeltas(tx, rules.balanceDeltas);
+
+    if (rules.savingsBucketDelta > 0 && savingsBucketId) {
+      await tx.savingsBucket.update({
+        where: { id: savingsBucketId },
+        data: {
+          currentAmount: {
+            increment: rules.savingsBucketDelta
+          }
+        }
+      });
+    }
+  });
+
+  revalidateTransactionViews();
+}
+
+export async function deleteRecentTransaction(formData: FormData): Promise<void> {
+  const id = parseRequiredString(formData.get("id"));
+
+  await prisma.$transaction(async (tx) => {
+    const transaction = await getEditableTransaction(tx, id);
+
+    await reverseEditableTransaction(tx, transaction);
+    await tx.transaction.delete({ where: { id } });
+  });
+
+  revalidateTransactionViews();
 }
 
 export async function createReimbursableExpense(
@@ -479,6 +582,9 @@ export async function deleteAccount(formData: FormData): Promise<void> {
 
 export async function createSavingsBucket(formData: FormData): Promise<void> {
   const name = parseRequiredString(formData.get("name"));
+  const currentAmount = parseNonNegativeAmountAllowingZero(
+    formData.get("currentAmount")
+  );
   const targetAmount = parseOptionalNonNegativeAmount(
     formData.get("targetAmount")
   );
@@ -489,7 +595,7 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
   await prisma.savingsBucket.create({
     data: {
       name,
-      currentAmount: 0,
+      currentAmount,
       targetAmount,
       targetDate,
       priority,
@@ -840,7 +946,21 @@ export async function closeMonth(
           }
         },
         select: {
+          account: {
+            select: {
+              includeInMonthlySavings: true,
+              includeInNetWorth: true,
+              type: true
+            }
+          },
           date: true,
+          destinationAccount: {
+            select: {
+              includeInMonthlySavings: true,
+              includeInNetWorth: true,
+              type: true
+            }
+          },
           amount: true,
           type: true,
           affectsPersonalExpense: true,
@@ -865,6 +985,21 @@ export async function closeMonth(
         year,
         month
       );
+      const longTermTransferAllocation = calculateLongTermTransferAllocation(
+        transactionsAfterAdjustments
+      );
+      const longTermBucketAdjustment = calculateLongTermBucketAdjustment(
+        closedAccounts.map((account) => ({
+          difference: account.difference,
+          includeInMonthlySavings: account.includeInMonthlySavings,
+          includeInNetWorth: account.includeInNetWorth,
+          type: account.type
+        }))
+      );
+      const manualCloseResult = getManualMonthlyCloseResult(
+        monthlySavings,
+        longTermTransferAllocation + longTermBucketAdjustment
+      );
       const savingsAllocations = manualSavingsBuckets.map((bucket) => ({
         bucketId: bucket.id,
         amount: parseAmountAllowingZero(
@@ -878,10 +1013,13 @@ export async function closeMonth(
         )
       }));
 
-      validatePositiveBucketAllocations(savingsAllocations, monthlySavings);
+      validatePositiveBucketAllocations(
+        savingsAllocations,
+        manualCloseResult.monthlySavings
+      );
       validateNegativeBucketReductions(
         savingsReductions,
-        monthlySavings,
+        manualCloseResult.monthlySavings,
         manualSavingsBuckets.map((bucket) => ({
           currentAmount: bucket.currentAmount,
           id: bucket.id
@@ -1186,6 +1324,102 @@ export async function undoLatestMonthlyClose(formData: FormData): Promise<void> 
   redirect(returnTo);
 }
 
+type EditableTransaction = Prisma.TransactionGetPayload<{
+  include: {
+    originalReimbursement: { select: { id: true } };
+    recurringOccurrence: { select: { id: true } };
+  };
+}>;
+
+async function getEditableTransaction(
+  tx: Prisma.TransactionClient,
+  id: string
+): Promise<EditableTransaction> {
+  const transaction = await tx.transaction.findUnique({
+    where: { id },
+    include: {
+      originalReimbursement: { select: { id: true } },
+      recurringOccurrence: { select: { id: true } }
+    }
+  });
+
+  if (!transaction) {
+    throw new Error("El movimiento no existe.");
+  }
+
+  if (transaction.monthlyCloseId) {
+    throw new Error("No se puede editar un movimiento incluido en un cierre.");
+  }
+
+  if (transaction.originalReimbursement || transaction.reimbursementId) {
+    throw new Error("Gestiona los reembolsos desde su pantalla específica.");
+  }
+
+  if (transaction.recurringOccurrence) {
+    throw new Error("Gestiona los movimientos fijos desde su pantalla específica.");
+  }
+
+  if (!EDITABLE_TRANSACTION_TYPES.has(transaction.type as QuickTransactionType)) {
+    throw new Error("Este tipo de movimiento no se puede editar desde recientes.");
+  }
+
+  return transaction;
+}
+
+async function reverseEditableTransaction(
+  tx: Prisma.TransactionClient,
+  transaction: EditableTransaction
+): Promise<void> {
+  const amount = toMoneyNumber(transaction.amount);
+
+  if (transaction.type === "expense") {
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { currentBalance: { increment: amount } }
+    });
+    return;
+  }
+
+  if (transaction.type === "income") {
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { currentBalance: { decrement: amount } }
+    });
+    return;
+  }
+
+  if (transaction.type === "transfer") {
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { currentBalance: { increment: amount } }
+    });
+
+    if (transaction.destinationAccountId) {
+      await tx.account.update({
+        where: { id: transaction.destinationAccountId },
+        data: { currentBalance: { decrement: amount } }
+      });
+    }
+    return;
+  }
+
+  if (transaction.type === "savings_allocation" && transaction.savingsBucketId) {
+    const bucket = await tx.savingsBucket.findUnique({
+      where: { id: transaction.savingsBucketId },
+      select: { currentAmount: true }
+    });
+
+    if (!bucket || toMoneyNumber(bucket.currentAmount) < amount) {
+      throw new Error("No hay saldo suficiente en la partida para revertirlo.");
+    }
+
+    await tx.savingsBucket.update({
+      where: { id: transaction.savingsBucketId },
+      data: { currentAmount: { decrement: amount } }
+    });
+  }
+}
+
 function parseCloseMonth(value: FormDataEntryValue | null): number {
   const parsedValue = parseIntegerField(value, "Mes no válido.");
 
@@ -1334,6 +1568,18 @@ function parseTransactionType(value: FormDataEntryValue | null): QuickTransactio
   }
 
   return value as QuickTransactionType;
+}
+
+function parseEditableTransactionType(
+  value: FormDataEntryValue | null
+): QuickTransactionType {
+  const type = parseTransactionType(value);
+
+  if (!EDITABLE_TRANSACTION_TYPES.has(type)) {
+    throw new Error("Este tipo de movimiento no se puede editar desde recientes.");
+  }
+
+  return type;
 }
 
 function parseAmount(value: FormDataEntryValue | null): number {
@@ -1485,6 +1731,26 @@ async function assertCategoryMatchesType(
 
   if (category.type !== "both" && category.type !== type) {
     throw new Error("La categoría no corresponde al tipo de movimiento.");
+  }
+}
+
+async function assertEditableSavingsBucketExists(
+  tx: Prisma.TransactionClient,
+  savingsBucketId: string
+): Promise<void> {
+  const bucket = await tx.savingsBucket.findUnique({
+    where: { id: savingsBucketId },
+    select: { id: true, isLongTerm: true }
+  });
+
+  if (!bucket) {
+    throw new Error("La partida de ahorro no existe.");
+  }
+
+  if (bucket.isLongTerm) {
+    throw new Error(
+      "La partida Largo plazo se calcula desde cuentas y no admite asignaciones manuales."
+    );
   }
 }
 
