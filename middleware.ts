@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   createSessionToken,
   getSessionCookieOptions,
+  normalizeSessionDuration,
   SESSION_COOKIE_NAME,
+  SESSION_DURATION_SECONDS,
   verifySessionToken
 } from "@/lib/session";
 
@@ -21,12 +23,18 @@ export async function middleware(request: NextRequest) {
 
   if (session) {
     const response = NextResponse.next();
-    const refreshedToken = await createSessionToken(session.userId);
+    const durationSeconds = normalizeSessionDuration(
+      session.durationSeconds ?? SESSION_DURATION_SECONDS
+    );
+    const refreshedToken = await createSessionToken(
+      session.userId,
+      durationSeconds
+    );
 
     response.cookies.set(
       SESSION_COOKIE_NAME,
       refreshedToken,
-      getSessionCookieOptions()
+      getSessionCookieOptions(durationSeconds)
     );
 
     return response;

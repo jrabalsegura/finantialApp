@@ -56,6 +56,7 @@ export async function loginUser(
 
   const { password, username } = credentials;
   const nextPath = getSafeRedirectPath(formData.get("next"));
+  const remember = formData.get("rememberMe") === "on";
 
   const user = await prisma.appUser.findUnique({
     where: { username },
@@ -72,7 +73,7 @@ export async function loginUser(
     };
   }
 
-  await createUserSession(user.id);
+  await createUserSession(user.id, { remember });
   redirect(nextPath);
 }
 

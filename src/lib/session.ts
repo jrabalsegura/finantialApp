@@ -1,10 +1,13 @@
 export const SESSION_COOKIE_NAME = "financial_app_session";
 export const SESSION_DURATION_SECONDS = 60 * 60;
+export const REMEMBERED_SESSION_DURATION_SECONDS = 60 * 60 * 24 * 30;
 
-export function getSessionCookieOptions() {
+export function getSessionCookieOptions(
+  durationSeconds = SESSION_DURATION_SECONDS
+) {
   return {
     httpOnly: true,
-    maxAge: SESSION_DURATION_SECONDS,
+    maxAge: durationSeconds,
     path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production"
@@ -12,6 +15,7 @@ export function getSessionCookieOptions() {
 }
 
 export type SessionPayload = {
+  durationSeconds?: number;
   exp: number;
   iat: number;
   userId: string;
@@ -21,10 +25,13 @@ const textEncoder = new TextEncoder();
 
 export async function createSessionToken(
   userId: string,
+  durationSeconds = SESSION_DURATION_SECONDS,
   issuedAt = Math.floor(Date.now() / 1000)
 ): Promise<string> {
+  const safeDurationSeconds = normalizeSessionDuration(durationSeconds);
   const payload: SessionPayload = {
-    exp: issuedAt + SESSION_DURATION_SECONDS,
+    durationSeconds: safeDurationSeconds,
+    exp: issuedAt + safeDurationSeconds,
     iat: issuedAt,
     userId
   };
@@ -93,7 +100,24 @@ function isSessionPayload(payload: unknown): payload is SessionPayload {
     typeof candidate.iat === "number" &&
     Number.isFinite(candidate.iat) &&
     typeof candidate.exp === "number" &&
-    Number.isFinite(candidate.exp)
+    Number.isFinite(candidate.exp) &&
+    (candidate.durationSeconds === undefined ||
+      (typeof candidate.durationSeconds === "number" &&
+        isAllowedSessionDuration(candidate.durationSeconds)))
+  );
+}
+
+export function normalizeSessionDuration(durationSeconds: number): number {
+  return isAllowedSessionDuration(durationSeconds)
+    ? durationSeconds
+    : SESSION_DURATION_SECONDS;
+}
+
+function isAllowedSessionDuration(durationSeconds: number): boolean {
+  return (
+    Number.isFinite(durationSeconds) &&
+    (durationSeconds === SESSION_DURATION_SECONDS ||
+      durationSeconds === REMEMBERED_SESSION_DURATION_SECONDS)
   );
 }
 

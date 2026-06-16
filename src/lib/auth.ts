@@ -4,15 +4,27 @@ import { prisma } from "@/lib/prisma";
 import {
   createSessionToken,
   getSessionCookieOptions,
+  REMEMBERED_SESSION_DURATION_SECONDS,
   SESSION_COOKIE_NAME,
+  SESSION_DURATION_SECONDS,
   verifySessionToken
 } from "@/lib/session";
 
-export async function createUserSession(userId: string): Promise<void> {
-  const token = await createSessionToken(userId);
+export async function createUserSession(
+  userId: string,
+  { remember = false }: { remember?: boolean } = {}
+): Promise<void> {
+  const durationSeconds = remember
+    ? REMEMBERED_SESSION_DURATION_SECONDS
+    : SESSION_DURATION_SECONDS;
+  const token = await createSessionToken(userId, durationSeconds);
   const cookieStore = await cookies();
 
-  cookieStore.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
+  cookieStore.set(
+    SESSION_COOKIE_NAME,
+    token,
+    getSessionCookieOptions(durationSeconds)
+  );
 }
 
 export async function clearUserSession(): Promise<void> {

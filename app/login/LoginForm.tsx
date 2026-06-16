@@ -78,6 +78,13 @@ export function LoginForm({
         </label>
       )}
 
+      {hasUsers ? (
+        <label className="check-row">
+          <input name="rememberMe" type="checkbox" />
+          Recordarme durante 30 días
+        </label>
+      ) : null}
+
       {state.status === "error" ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
           {state.message}
