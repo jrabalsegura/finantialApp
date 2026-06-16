@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { TransactionType } from "@prisma/client";
-import { toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  calculateLongTermBucketBalance,
+  toMoneyNumber
+} from "@/domain/financial-calculations";
 import { TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
 import {
   currencyFormatter,
@@ -31,28 +34,42 @@ export default async function SavingsBucketHistoryPage({
     notFound();
   }
 
-  const transactions = await prisma.transaction.findMany({
-    where: { savingsBucketId: bucketId },
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    include: {
-      account: {
-        select: {
-          name: true
-        }
-      },
-      category: {
-        select: {
-          name: true
+  const [transactions, accounts] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { savingsBucketId: bucketId },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      include: {
+        account: {
+          select: {
+            name: true
+          }
+        },
+        category: {
+          select: {
+            name: true
+          }
         }
       }
-    }
-  });
+    }),
+    bucket.isLongTerm
+      ? prisma.account.findMany({
+          select: {
+            currentBalance: true,
+            includeInMonthlySavings: true,
+            includeInNetWorth: true,
+            type: true
+          }
+        })
+      : Promise.resolve([])
+  ]);
 
   const netAssigned = transactions.reduce(
     (total, transaction) => total + getSignedBucketAmount(transaction),
     0
   );
-  const currentAmount = toMoneyNumber(bucket.currentAmount);
+  const currentAmount = bucket.isLongTerm
+    ? calculateLongTermBucketBalance(accounts)
+    : toMoneyNumber(bucket.currentAmount);
   const targetAmount = bucket.targetAmount ? toMoneyNumber(bucket.targetAmount) : null;
 
   return (

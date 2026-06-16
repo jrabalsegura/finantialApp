@@ -81,6 +81,7 @@ export default async function RecurringPage() {
       }),
       prisma.savingsBucket.findMany({
         orderBy: [{ priority: "asc" }, { name: "asc" }],
+        where: { isLongTerm: false },
         select: { id: true, name: true }
       }),
       prisma.recurringTransaction.findMany({

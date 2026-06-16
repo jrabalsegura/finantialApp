@@ -89,6 +89,9 @@ export default async function Home() {
       return left.name.localeCompare(right.name, "es");
     });
   const dashboardGoalBuckets = goalBuckets.slice(0, 4);
+  const manualSavingsBuckets = savingsBuckets.filter(
+    (bucket) => !bucket.isLongTerm
+  );
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -314,7 +317,7 @@ export default async function Home() {
                 categories={categories}
                 defaultAccountId={defaultAccountId}
                 reimbursements={reimbursementOptions}
-                savingsBuckets={savingsBuckets.map(({ id, name }) => ({
+                savingsBuckets={manualSavingsBuckets.map(({ id, name }) => ({
                   id,
                   name
                 }))}

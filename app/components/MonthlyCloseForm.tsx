@@ -13,6 +13,7 @@ import { SavingsGoalProgress } from "./SavingsGoalProgress";
 import {
   accountFeedsLongTermBucket,
   calculateLongTermBucketAdjustment,
+  calculateLongTermBucketBalance,
   getMonthlyCloseResult
 } from "@/domain/financial-calculations";
 
@@ -135,6 +136,22 @@ export function MonthlyCloseForm({
       type: account.type
     }))
   );
+  const currentLongTermBucketBalance = calculateLongTermBucketBalance(
+    accountRows.map((account) => ({
+      currentBalance: account.calculatedBalance,
+      includeInMonthlySavings: account.includeInMonthlySavings,
+      includeInNetWorth: account.includeInNetWorth,
+      type: account.type
+    }))
+  );
+  const finalLongTermBucketBalance = calculateLongTermBucketBalance(
+    accountRows.map((account) => ({
+      currentBalance: account.realBalance,
+      includeInMonthlySavings: account.includeInMonthlySavings,
+      includeInNetWorth: account.includeInNetWorth,
+      type: account.type
+    }))
+  );
   const allocationTotal = roundMoney(
     manualBuckets.reduce(
       (total, bucket) => total + parseInputAmount(allocations[bucket.id]),
@@ -178,24 +195,6 @@ export function MonthlyCloseForm({
   const hasInsufficientBucketBalance =
     closeResult.kind === "negative" &&
     totalAvailableInBuckets < closeResult.deficit;
-  const longTermOrdinaryAllocation =
-    longTermBucket == null ? 0 : parseInputAmount(allocations[longTermBucket.id]);
-  const longTermOrdinaryReduction =
-    longTermBucket == null ? 0 : parseInputAmount(reductions[longTermBucket.id]);
-  const projectedLongTermBucketBalance =
-    longTermBucket == null
-      ? null
-      : roundMoney(
-          longTermBucket.currentAmount +
-            longTermOrdinaryAllocation -
-            longTermOrdinaryReduction +
-            longTermBucketAdjustment
-        );
-  const hasInvalidLongTermAdjustment =
-    longTermBucketAdjustment !== 0 &&
-    (longTermBucket == null ||
-      projectedLongTermBucketBalance == null ||
-      projectedLongTermBucketBalance < 0);
 
   return (
     <form action={formAction} className="grid gap-6">
@@ -363,13 +362,12 @@ export function MonthlyCloseForm({
           title={getBucketStepTitle(closeResult.kind)}
           text={getBucketStepText(closeResult.kind)}
         />
-        {longTermBucket || longTermBucketAdjustment !== 0 ? (
-          <AutomaticLongTermAdjustment
+        {longTermBucket ? (
+          <DerivedLongTermBucket
             adjustment={longTermBucketAdjustment}
             bucketName={longTermBucket?.name ?? "Largo plazo"}
-            currentAmount={longTermBucket?.currentAmount ?? null}
-            isInvalid={hasInvalidLongTermAdjustment}
-            projectedAmount={projectedLongTermBucketBalance}
+            currentAmount={currentLongTermBucketBalance}
+            finalAmount={finalLongTermBucketBalance}
           />
         ) : null}
         {manualBuckets.length > 0 && closeResult.kind === "positive" ? (
@@ -600,8 +598,7 @@ export function MonthlyCloseForm({
             hasInvalidAdjustment ||
             hasInvalidAllocation ||
             hasInvalidReduction ||
-            hasInsufficientBucketBalance ||
-            hasInvalidLongTermAdjustment
+            hasInsufficientBucketBalance
           }
           type="submit"
         >
@@ -651,18 +648,16 @@ function BucketAmount({
   );
 }
 
-function AutomaticLongTermAdjustment({
+function DerivedLongTermBucket({
   adjustment,
   bucketName,
   currentAmount,
-  isInvalid,
-  projectedAmount
+  finalAmount
 }: {
   adjustment: number;
   bucketName: string;
-  currentAmount: number | null;
-  isInvalid: boolean;
-  projectedAmount: number | null;
+  currentAmount: number;
+  finalAmount: number;
 }) {
   const tone =
     adjustment > 0
@@ -679,31 +674,23 @@ function AutomaticLongTermAdjustment({
           {currencyFormatter.format(adjustment)}
         </p>
         <p className="mt-1">
-          Sale de las diferencias de cuentas de largo plazo que no cuentan para
-          el ahorro mensual. No se trata como ingreso ni como gasto.
+          Su saldo se calcula como la suma de las cuentas de largo plazo que no
+          cuentan para el ahorro mensual. No se edita ni se reparte manualmente.
         </p>
-        {currentAmount != null && projectedAmount != null ? (
-          <p className="mt-1">
-            Saldo final estimado:{" "}
-            {currencyFormatter.format(projectedAmount)}
-          </p>
-        ) : null}
-        {isInvalid ? (
-          <p className="mt-2 font-medium">
-            Falta una partida de largo plazo o el ajuste dejaría su saldo en
-            negativo.
-          </p>
-        ) : null}
+        <p className="mt-1">
+          Calculado: {currencyFormatter.format(currentAmount)} · Final:{" "}
+          {currencyFormatter.format(finalAmount)}
+        </p>
       </div>
       <label className="grid gap-2 text-sm font-medium text-ink">
-        Largo plazo automático
+        Largo plazo derivado
         <input
           className="field-input"
           inputMode="decimal"
-          name="longTermBucketAdjustment"
+          name="derivedLongTermBucketAmount"
           readOnly
           type="number"
-          value={formatInputAmount(adjustment)}
+          value={formatInputAmount(finalAmount)}
         />
       </label>
     </div>

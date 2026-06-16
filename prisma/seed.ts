@@ -187,21 +187,17 @@ async function main() {
     }
   });
 
-  const [defaultAccount, savingsAccount, salaryCategory, subscriptionCategory, longTermBucket] =
+  const [defaultAccount, salaryCategory, subscriptionCategory] =
     await Promise.all([
       prisma.account.findUnique({ where: { name: "Openbank principal" } }),
-      prisma.account.findUnique({ where: { name: "Openbank ahorro" } }),
       prisma.category.findUnique({ where: { name: "Nómina" } }),
-      prisma.category.findUnique({ where: { name: "Suscripciones" } }),
-      prisma.savingsBucket.findUnique({ where: { name: "Largo plazo" } })
+      prisma.category.findUnique({ where: { name: "Suscripciones" } })
     ]);
 
   if (
     defaultAccount &&
-    savingsAccount &&
     salaryCategory &&
-    subscriptionCategory &&
-    longTermBucket
+    subscriptionCategory
   ) {
     const recurringExamples = [
       {
@@ -223,16 +219,6 @@ async function main() {
         savingsBucketId: null,
         destinationAccountId: null,
         dayOfMonth: 5
-      },
-      {
-        name: "Aportación mensual a largo plazo",
-        type: "savings_allocation" as const,
-        amount: 300,
-        accountId: savingsAccount.id,
-        categoryId: null,
-        savingsBucketId: longTermBucket.id,
-        destinationAccountId: null,
-        dayOfMonth: 1
       }
     ];
 

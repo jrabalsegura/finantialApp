@@ -6,7 +6,7 @@ import type { AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   accountFeedsLongTermBucket,
-  calculateLongTermBucketAdjustment,
+  calculateLongTermBucketBalance,
   createMonthlyBucketSnapshots,
   calculateAvailableMoney,
   calculateNetWorth,
@@ -484,7 +484,6 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
   );
   const targetDate = parseOptionalDate(formData.get("targetDate"));
   const priority = parseOptionalInteger(formData.get("priority"));
-  const isLongTerm = parseCheckbox(formData.get("isLongTerm"));
   const notes = parseOptionalString(formData.get("notes"));
 
   await prisma.savingsBucket.create({
@@ -494,7 +493,7 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
       targetAmount,
       targetDate,
       priority,
-      isLongTerm,
+      isLongTerm: false,
       notes
     }
   });
@@ -510,7 +509,6 @@ export async function updateSavingsBucket(formData: FormData): Promise<void> {
   );
   const targetDate = parseOptionalDate(formData.get("targetDate"));
   const priority = parseOptionalInteger(formData.get("priority"));
-  const isLongTerm = parseCheckbox(formData.get("isLongTerm"));
   const notes = parseOptionalString(formData.get("notes"));
 
   await prisma.savingsBucket.update({
@@ -520,7 +518,6 @@ export async function updateSavingsBucket(formData: FormData): Promise<void> {
       targetAmount,
       targetDate,
       priority,
-      isLongTerm,
       notes
     }
   });
@@ -532,6 +529,19 @@ export async function deleteSavingsBucket(formData: FormData): Promise<void> {
   const id = parseRequiredString(formData.get("id"));
 
   await prisma.$transaction(async (tx) => {
+    const bucket = await tx.savingsBucket.findUnique({
+      where: { id },
+      select: { isLongTerm: true }
+    });
+
+    if (!bucket) {
+      throw new Error("La partida de ahorro no existe.");
+    }
+
+    if (bucket.isLongTerm) {
+      throw new Error("La partida Largo plazo es derivada y no se puede eliminar.");
+    }
+
     const relatedTransactions = await tx.transaction.count({
       where: { savingsBucketId: id }
     });
@@ -579,6 +589,7 @@ export async function transferBetweenSavingsBuckets(
         select: {
           currentAmount: true,
           id: true,
+          isLongTerm: true,
           name: true
         }
       }),
@@ -586,6 +597,7 @@ export async function transferBetweenSavingsBuckets(
         where: { id: destinationBucketId },
         select: {
           id: true,
+          isLongTerm: true,
           name: true
         }
       }),
@@ -597,6 +609,12 @@ export async function transferBetweenSavingsBuckets(
 
     if (!sourceBucket || !destinationBucket) {
       throw new Error("La partida de ahorro seleccionada no existe.");
+    }
+
+    if (sourceBucket.isLongTerm || destinationBucket.isLongTerm) {
+      throw new Error(
+        "La partida de largo plazo se calcula desde cuentas y no admite transferencias manuales."
+      );
     }
 
     if (!defaultAccount) {
@@ -859,14 +877,6 @@ export async function closeMonth(
           formData.get(`savingsReduction_${bucket.id}`)
         )
       }));
-      const longTermBucketAdjustment = calculateLongTermBucketAdjustment(
-        closedAccounts.map((account) => ({
-          difference: account.difference,
-          includeInMonthlySavings: account.includeInMonthlySavings,
-          includeInNetWorth: account.includeInNetWorth,
-          type: account.type
-        }))
-      );
 
       validatePositiveBucketAllocations(savingsAllocations, monthlySavings);
       validateNegativeBucketReductions(
@@ -877,40 +887,6 @@ export async function closeMonth(
           id: bucket.id
         }))
       );
-
-      const longTermBucket =
-        longTermBucketAdjustment !== 0
-          ? savingsBuckets.find((bucket) => bucket.isLongTerm)
-          : null;
-
-      if (longTermBucketAdjustment !== 0 && !longTermBucket) {
-        throw new Error(
-          "No existe una partida de ahorro de largo plazo para asignar el ajuste automático."
-        );
-      }
-
-      if (longTermBucket && longTermBucketAdjustment < 0) {
-        const longTermOrdinaryAllocation =
-          savingsAllocations.find(
-            (allocation) => allocation.bucketId === longTermBucket.id
-          )?.amount ?? 0;
-        const longTermOrdinaryReduction =
-          savingsReductions.find(
-            (reduction) => reduction.bucketId === longTermBucket.id
-          )?.amount ?? 0;
-        const projectedLongTermBalance = roundMoney(
-          toMoneyNumber(longTermBucket.currentAmount) +
-            longTermOrdinaryAllocation -
-            longTermOrdinaryReduction +
-            longTermBucketAdjustment
-        );
-
-        if (projectedLongTermBalance < 0) {
-          throw new Error(
-            "El ajuste automático de largo plazo dejaría la partida en negativo."
-          );
-        }
-      }
 
       for (const allocation of savingsAllocations) {
         if (allocation.amount <= 0) {
@@ -987,50 +963,13 @@ export async function closeMonth(
         generatedCloseTransactionIds.push(transaction.id);
       }
 
-      if (longTermBucket && longTermBucketAdjustment !== 0) {
-        const adjustmentAmount = Math.abs(longTermBucketAdjustment);
-        const transactionType =
-          longTermBucketAdjustment > 0
-            ? "savings_allocation"
-            : "savings_withdrawal";
-        const impact = getDefaultTransactionImpact(transactionType);
-
-        await tx.savingsBucket.update({
-          where: { id: longTermBucket.id },
-          data: {
-            currentAmount:
-              longTermBucketAdjustment > 0
-                ? { increment: adjustmentAmount }
-                : { decrement: adjustmentAmount }
-          }
-        });
-
-        const transaction = await tx.transaction.create({
-          data: {
-            date: closeDate,
-            amount: adjustmentAmount,
-            type: transactionType,
-            description: `Ajuste automático largo plazo cierre ${String(
-              month
-            ).padStart(2, "0")}/${year}`,
-            accountId: defaultAccount.id,
-            savingsBucketId: longTermBucket.id,
-            affectsRealBalance: impact.affectsRealBalance,
-            affectsPersonalExpense: impact.affectsPersonalExpense,
-            affectsPersonalIncome: impact.affectsPersonalIncome,
-            affectsMonthlySavings: impact.affectsMonthlySavings,
-            affectsNetWorth: impact.affectsNetWorth
-          }
-        });
-        generatedCloseTransactionIds.push(transaction.id);
-      }
-
       const [finalSavingsBuckets, reimbursements] = await Promise.all([
         tx.savingsBucket.findMany({
           orderBy: [{ priority: "asc" }, { name: "asc" }],
           select: {
             id: true,
-            currentAmount: true
+            currentAmount: true,
+            isLongTerm: true
           }
         }),
         tx.reimbursement.findMany({
@@ -1048,19 +987,13 @@ export async function closeMonth(
       const finalAccounts = closedAccounts.map((account) => ({
         currentBalance: account.realBalance,
         includeInAvailableMoney: account.includeInAvailableMoney,
+        includeInMonthlySavings: account.includeInMonthlySavings,
         includeInNetWorth: account.includeInNetWorth,
         type: account.type
       }));
       const availableMoney = calculateAvailableMoney(finalAccounts);
       const netWorth = calculateNetWorth(finalAccounts, reimbursements);
-      const longTermAssets = finalAccounts
-        .filter((account) =>
-          ["investment", "pension", "treasury"].includes(account.type)
-        )
-        .reduce(
-          (total, account) => total + toMoneyNumber(account.currentBalance),
-          0
-        );
+      const longTermAssets = calculateLongTermBucketBalance(finalAccounts);
 
       const monthlyClose = await tx.monthlyClose.create({
         data: {
@@ -1105,7 +1038,7 @@ export async function closeMonth(
 
       const bucketSnapshots = createMonthlyBucketSnapshots(
         finalSavingsBuckets.map((bucket) => ({
-          amount: bucket.currentAmount,
+          amount: bucket.isLongTerm ? longTermAssets : bucket.currentAmount,
           id: bucket.id
         }))
       );

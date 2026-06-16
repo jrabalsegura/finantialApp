@@ -38,6 +38,7 @@ export type AccountForCalculations = {
 export type LongTermAccountType = "investment" | "pension" | "treasury";
 
 export type AccountForLongTermBucketAdjustment = {
+  currentBalance?: MoneyValue;
   difference: MoneyValue;
   includeInMonthlySavings: boolean;
   includeInNetWorth: boolean;
@@ -291,6 +292,34 @@ export function calculateLongTermBucketAdjustment(
     accounts
       .filter(accountFeedsLongTermBucket)
       .map((account) => account.difference)
+  );
+}
+
+export function calculateLongTermBucketBalance(
+  accounts: Array<
+    Pick<
+      AccountForLongTermBucketAdjustment,
+      "currentBalance" | "includeInMonthlySavings" | "includeInNetWorth" | "type"
+    >
+  >
+): number {
+  return sumMoney(
+    accounts
+      .filter(
+        (
+          account
+        ): account is Required<
+          Pick<
+            AccountForLongTermBucketAdjustment,
+            | "currentBalance"
+            | "includeInMonthlySavings"
+            | "includeInNetWorth"
+            | "type"
+          >
+        > =>
+          account.currentBalance != null && accountFeedsLongTermBucket(account)
+      )
+      .map((account) => account.currentBalance)
   );
 }
 

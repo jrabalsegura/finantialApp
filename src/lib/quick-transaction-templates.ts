@@ -121,8 +121,13 @@ async function validateQuickTemplateRelations(
     }
     const bucket = await tx.savingsBucket.findUnique({
       where: { id: input.savingsBucketId },
-      select: { id: true }
+      select: { id: true, isLongTerm: true }
     });
     if (!bucket) throw new Error("La partida de ahorro no existe.");
+    if (bucket.isLongTerm) {
+      throw new Error(
+        "La partida Largo plazo se calcula desde cuentas y no admite plantillas manuales."
+      );
+    }
   }
 }

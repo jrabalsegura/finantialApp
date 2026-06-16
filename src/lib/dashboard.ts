@@ -5,6 +5,7 @@ import {
 import {
   calculateAssignedSavings,
   calculateAvailableMoney,
+  calculateLongTermBucketBalance,
   calculateNetWorth,
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
@@ -46,7 +47,9 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         name: true,
         currentBalance: true,
         includeInAvailableMoney: true,
+        includeInMonthlySavings: true,
         includeInNetWorth: true,
+        type: true,
         isDefault: true
       }
     }),
@@ -167,6 +170,18 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
   const pendingRecurringOccurrences = recurringOccurrences.filter(
     (occurrence) => occurrence.status === "pending"
   );
+  const longTermBalance = calculateLongTermBucketBalance(accounts);
+  const displaySavingsBuckets = savingsBuckets.map((bucket) => ({
+    ...bucket,
+    currentAmount: bucket.isLongTerm
+      ? {
+          toNumber: () => longTermBalance
+        }
+      : bucket.currentAmount
+  }));
+  const manualSavingsBuckets = displaySavingsBuckets.filter(
+    (bucket) => !bucket.isLongTerm
+  );
 
   return {
     currentMonth,
@@ -175,7 +190,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     categories,
     recentTransactions,
     reimbursements,
-    savingsBuckets,
+    savingsBuckets: displaySavingsBuckets,
     weeklyBudgetReport,
     defaultAccountId: defaultAccount?.id ?? null,
     availableMoney: calculateAvailableMoney(accounts),
@@ -196,10 +211,10 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
       currentMonth
     ),
     pendingReimbursements: calculatePendingReimbursements(reimbursements),
-    assignedSavings: calculateAssignedSavings(savingsBuckets),
+    assignedSavings: calculateAssignedSavings(manualSavingsBuckets),
     unassignedMoney: calculateUnassignedAvailableMoney(
       accounts,
-      savingsBuckets
+      manualSavingsBuckets
     ),
     netWorthVariation:
       calculateDashboardNetWorthVariation(monthlyCloses),

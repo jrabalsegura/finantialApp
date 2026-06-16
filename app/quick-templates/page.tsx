@@ -64,6 +64,7 @@ export default async function QuickTemplatesPage() {
     }),
     prisma.savingsBucket.findMany({
       orderBy: [{ priority: "asc" }, { name: "asc" }],
+      where: { isLongTerm: false },
       select: { id: true, name: true }
     }),
     getQuickTemplates()

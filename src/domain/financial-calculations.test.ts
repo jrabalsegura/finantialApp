@@ -4,6 +4,7 @@ import {
   calculateAvailableMoney,
   calculateAssignedSavings,
   calculateLongTermBucketAdjustment,
+  calculateLongTermBucketBalance,
   calculateNetWorth,
   calculateNetWorthVariation,
   calculatePendingReimbursements,
@@ -136,24 +137,28 @@ test("calcula el ajuste automatico de largo plazo por cuentas fuera del ahorro m
   assert.equal(
     calculateLongTermBucketAdjustment([
       {
+        currentBalance: 1000,
         difference: 120,
         includeInMonthlySavings: false,
         includeInNetWorth: true,
         type: "investment"
       },
       {
+        currentBalance: 500,
         difference: -40,
         includeInMonthlySavings: false,
         includeInNetWorth: true,
         type: "pension"
       },
       {
+        currentBalance: 200,
         difference: 500,
         includeInMonthlySavings: true,
         includeInNetWorth: true,
         type: "savings"
       },
       {
+        currentBalance: 300,
         difference: 80,
         includeInMonthlySavings: false,
         includeInNetWorth: false,
@@ -161,6 +166,29 @@ test("calcula el ajuste automatico de largo plazo por cuentas fuera del ahorro m
       }
     ]),
     80
+  );
+  assert.equal(
+    calculateLongTermBucketBalance([
+      {
+        currentBalance: 1000,
+        includeInMonthlySavings: false,
+        includeInNetWorth: true,
+        type: "investment"
+      },
+      {
+        currentBalance: 500,
+        includeInMonthlySavings: false,
+        includeInNetWorth: true,
+        type: "pension"
+      },
+      {
+        currentBalance: 200,
+        includeInMonthlySavings: true,
+        includeInNetWorth: true,
+        type: "investment"
+      }
+    ]),
+    1500
   );
 });
 

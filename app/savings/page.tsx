@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import {
   calculateAssignedSavings,
   calculateAvailableMoney,
+  calculateLongTermBucketBalance,
   calculateUnassignedAvailableMoney,
   toMoneyNumber
 } from "@/domain/financial-calculations";
@@ -31,7 +32,9 @@ export default async function SavingsPage() {
         name: true,
         currentBalance: true,
         includeInAvailableMoney: true,
+        includeInMonthlySavings: true,
         includeInNetWorth: true,
+        type: true,
         isDefault: true
       }
     }),
@@ -50,10 +53,22 @@ export default async function SavingsPage() {
   ]);
 
   const availableMoney = calculateAvailableMoney(accounts);
-  const assignedMoney = calculateAssignedSavings(savingsBuckets);
+  const longTermBalance = calculateLongTermBucketBalance(accounts);
+  const displaySavingsBuckets = savingsBuckets.map((bucket) => ({
+    ...bucket,
+    currentAmount: bucket.isLongTerm
+      ? {
+          toNumber: () => longTermBalance
+        }
+      : bucket.currentAmount
+  }));
+  const manualSavingsBuckets = displaySavingsBuckets.filter(
+    (bucket) => !bucket.isLongTerm
+  );
+  const assignedMoney = calculateAssignedSavings(manualSavingsBuckets);
   const unassignedMoney = calculateUnassignedAvailableMoney(
     accounts,
-    savingsBuckets
+    manualSavingsBuckets
   );
 
   return (
@@ -76,7 +91,7 @@ export default async function SavingsPage() {
           <Metric label="Dinero no asignado" value={unassignedMoney} />
         </section>
 
-        {savingsBuckets.length >= 2 ? (
+        {manualSavingsBuckets.length >= 2 ? (
           <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
             <h2 className="text-lg font-semibold text-ink">
               Transferir entre partidas
@@ -89,7 +104,7 @@ export default async function SavingsPage() {
                 Origen
                 <select className="field-input" name="sourceBucketId" required>
                   <option value="">Elige partida</option>
-                  {savingsBuckets.map((bucket) => (
+                  {manualSavingsBuckets.map((bucket) => (
                     <option key={bucket.id} value={bucket.id}>
                       {bucket.name} ·{" "}
                       {currencyFormatter.format(
@@ -108,7 +123,7 @@ export default async function SavingsPage() {
                   required
                 >
                   <option value="">Elige partida</option>
-                  {savingsBuckets.map((bucket) => (
+                  {manualSavingsBuckets.map((bucket) => (
                     <option key={bucket.id} value={bucket.id}>
                       {bucket.name}
                     </option>
@@ -151,9 +166,9 @@ export default async function SavingsPage() {
             <h2 className="text-lg font-semibold text-ink">Partidas</h2>
           </div>
 
-          {savingsBuckets.length > 0 ? (
+          {displaySavingsBuckets.length > 0 ? (
             <ul className="divide-y divide-line">
-              {savingsBuckets.map((bucket) => {
+              {displaySavingsBuckets.map((bucket) => {
                 const amount = toMoneyNumber(bucket.currentAmount);
                 const targetAmount = bucket.targetAmount
                   ? toMoneyNumber(bucket.targetAmount)
@@ -213,9 +228,11 @@ export default async function SavingsPage() {
                       <ConfirmSubmitButton
                         className="danger-button"
                         confirmMessage={`¿Seguro que quieres eliminar la partida "${bucket.name}"? Esta acción no se puede deshacer.`}
-                        disabled={hasRelations}
+                        disabled={bucket.isLongTerm || hasRelations}
                         title={
-                          hasRelations
+                          bucket.isLongTerm
+                            ? "La partida Largo plazo se calcula desde cuentas"
+                            : hasRelations
                             ? "No se puede borrar una partida con movimientos"
                             : undefined
                         }
@@ -279,7 +296,9 @@ function SavingsBucketFields({
 
         {mode === "edit" ? (
           <div className="grid gap-2 text-sm font-medium text-ink">
-            <span>Importe asignado</span>
+            <span>
+              {bucket?.isLongTerm ? "Importe derivado" : "Importe asignado"}
+            </span>
             <span className="amount-text flex min-h-12 items-center rounded-lg border border-line bg-surface px-3 py-2 text-base">
               {currencyFormatter.format(bucket?.currentAmount ?? 0)}
             </span>
@@ -324,15 +343,6 @@ function SavingsBucketFields({
             name="priority"
             type="number"
           />
-        </label>
-
-        <label className="check-row self-end">
-          <input
-            defaultChecked={bucket?.isLongTerm ?? false}
-            name="isLongTerm"
-            type="checkbox"
-          />
-          Largo plazo
         </label>
       </div>
 

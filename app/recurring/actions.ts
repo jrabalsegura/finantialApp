@@ -246,11 +246,17 @@ async function validateRecurringRelations(
   if (input.savingsBucketId) {
     const savingsBucket = await tx.savingsBucket.findUnique({
       where: { id: input.savingsBucketId },
-      select: { id: true }
+      select: { id: true, isLongTerm: true }
     });
 
     if (!savingsBucket) {
       throw new Error("La partida de ahorro no existe.");
+    }
+
+    if (savingsBucket.isLongTerm) {
+      throw new Error(
+        "La partida Largo plazo se calcula desde cuentas y no admite asignaciones recurrentes."
+      );
     }
   }
 }
