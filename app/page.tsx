@@ -180,7 +180,7 @@ export default async function Home() {
                 helper="Cuentas marcadas como disponibles"
               />
               <MetricCard
-                label="Patrimonio total"
+                label="Patrimonio líquido"
                 value={netWorth}
                 helper="Cuentas patrimoniales y pendientes vivos"
               />
