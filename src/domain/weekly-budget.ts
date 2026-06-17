@@ -53,6 +53,7 @@ export type WeeklyBudgetStatus = {
   monthlyTransferredOutOfAvailable: number;
   remainingVariableBudget: number;
   remainingDaysInMonth: number;
+  weeklyAllocationRemainingDaysInMonth: number;
   dailyAvailableBudget: number;
   weekStart: Date;
   weekEnd: Date;
@@ -264,31 +265,53 @@ export function getWeeklyBudgetStatus({
       monthlyTransferredOutOfAvailable
   );
   const monthEnd = endOfMonth(referenceDate);
+  const monthStart = startOfMonth(referenceDate);
   const weekStart = startOfWeek(referenceDate);
   const weekEnd = endOfWeek(referenceDate);
+  const weekRangeStart = maxDate(weekStart, monthStart);
+  const weekRangeEnd = minDate(weekEnd, monthEnd);
   const remainingDaysInMonth = countDaysInclusive(
     startOfDay(referenceDate),
     monthEnd
   );
+  const priorWeekVariableExpense = sumExpenses(
+    monthExpenses.filter(
+      (transaction) => new Date(transaction.date) < weekRangeStart
+    )
+  );
+  const priorWeekTransferredOutOfAvailable = sumExpenses(
+    monthAvailabilityTransfers.filter(
+      (transaction) => new Date(transaction.date) < weekRangeStart
+    )
+  );
+  const remainingVariableBudgetAtWeekStart = roundMoney(
+    monthlyVariableBudget -
+      priorWeekVariableExpense -
+      priorWeekTransferredOutOfAvailable
+  );
   const daysInCurrentWeekWithinMonth = countDaysInclusive(
-    maxDate(weekStart, startOfMonth(referenceDate)),
-    minDate(weekEnd, monthEnd)
+    weekRangeStart,
+    weekRangeEnd
   );
   const remainingDaysInCurrentWeekWithinMonth = countDaysInclusive(
     startOfDay(referenceDate),
-    minDate(weekEnd, monthEnd)
+    weekRangeEnd
+  );
+  const weeklyAllocationRemainingDaysInMonth = countDaysInclusive(
+    weekRangeStart,
+    monthEnd
   );
 
   const dailyAvailableBudget =
     setting.calculationMode === "remaining_days"
-      ? divideMoney(remainingVariableBudget, remainingDaysInMonth)
+      ? divideMoney(
+          remainingVariableBudgetAtWeekStart,
+          weeklyAllocationRemainingDaysInMonth
+        )
       : divideMoney(monthlyVariableBudget, daysInMonth(referenceDate));
-  const budgetDays =
-    setting.calculationMode === "remaining_days"
-      ? remainingDaysInCurrentWeekWithinMonth
-      : daysInCurrentWeekWithinMonth;
   const currentWeekAvailableBudget = roundMoney(
-    dailyAvailableBudget * budgetDays
+    dailyAvailableBudget * daysInCurrentWeekWithinMonth -
+      currentWeekTransferredOutOfAvailable
   );
   const currentWeekDifference = roundMoney(
     currentWeekAvailableBudget - currentWeekVariableExpense
@@ -316,6 +339,7 @@ export function getWeeklyBudgetStatus({
     monthlyTransferredOutOfAvailable,
     remainingVariableBudget,
     remainingDaysInMonth,
+    weeklyAllocationRemainingDaysInMonth,
     dailyAvailableBudget,
     weekStart,
     weekEnd,

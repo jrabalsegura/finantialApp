@@ -158,7 +158,7 @@ test("la semana empieza en lunes y se limita al mes actual", () => {
   );
 });
 
-test("calcula el objetivo semanal en modo días restantes", () => {
+test("calcula el objetivo semanal en modo días restantes sin reducirlo a mitad de semana", () => {
   const transactions = [
     expense("previous-week", 620, "2026-06-02"),
     expense("week-1", 100, "2026-06-08"),
@@ -175,12 +175,33 @@ test("calcula el objetivo semanal en modo días restantes", () => {
   assert.equal(status.monthlyVariableExpense, 800);
   assert.equal(status.remainingVariableBudget, 1700);
   assert.equal(status.remainingDaysInMonth, 21);
-  assert.equal(status.dailyAvailableBudget, 80.95);
+  assert.equal(status.weeklyAllocationRemainingDaysInMonth, 23);
+  assert.equal(status.dailyAvailableBudget, 81.74);
+  assert.equal(status.daysInCurrentWeekWithinMonth, 7);
   assert.equal(status.remainingDaysInCurrentWeekWithinMonth, 5);
-  assert.equal(status.currentWeekAvailableBudget, 404.75);
+  assert.equal(status.currentWeekAvailableBudget, 572.18);
   assert.equal(status.currentWeekVariableExpense, 180);
-  assert.equal(status.currentWeekDifference, 224.75);
-  assert.equal(status.percentageUsed, 44.5);
+  assert.equal(status.currentWeekDifference, 392.18);
+  assert.equal(status.percentageUsed, 31.5);
+});
+
+test("mantiene el mismo disponible semanal al pasar de lunes a martes sin nuevos movimientos", () => {
+  const mondayStatus = getWeeklyBudgetStatus({
+    recurringTransactions,
+    transactions: [],
+    setting,
+    referenceDate: new Date(2026, 5, 8, 12)
+  });
+  const tuesdayStatus = getWeeklyBudgetStatus({
+    recurringTransactions,
+    transactions: [],
+    setting,
+    referenceDate: new Date(2026, 5, 9, 12)
+  });
+
+  assert.equal(mondayStatus.currentWeekAvailableBudget, 760.9);
+  assert.equal(tuesdayStatus.currentWeekAvailableBudget, 760.9);
+  assert.equal(tuesdayStatus.currentWeekDifference, 760.9);
 });
 
 test("reparte proporcionalmente todos los días de la semana en modo mes completo", () => {
@@ -216,8 +237,9 @@ test("una transferencia a pensiones reduce el disponible sin sumarse otra vez al
   assert.equal(status.remainingVariableBudget, 2110);
   assert.equal(status.currentWeekVariableExpense, 180);
   assert.equal(status.currentWeekTransferredOutOfAvailable, 210);
-  assert.equal(status.currentWeekDifference, 322.4);
-  assert.equal(status.percentageUsed, 35.8);
+  assert.equal(status.currentWeekAvailableBudget, 550.9);
+  assert.equal(status.currentWeekDifference, 370.9);
+  assert.equal(status.percentageUsed, 32.7);
 });
 
 test("muestra estado vacío sin ingresos recurrentes y advierte presupuesto negativo", () => {

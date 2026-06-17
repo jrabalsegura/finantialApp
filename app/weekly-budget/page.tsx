@@ -110,12 +110,17 @@ export default async function WeeklyBudgetPage() {
               textValue={String(status.remainingDaysInMonth)}
             />
             <DetailRow
-              label="Disponible diario"
+              label="Días base de la semana"
+              note="Se fijan al iniciar la semana."
+              textValue={String(status.weeklyAllocationRemainingDaysInMonth)}
+            />
+            <DetailRow
+              label="Disponible diario base"
               value={status.dailyAvailableBudget}
             />
             <DetailRow
               label="Disponible para esta semana"
-              note={`${status.remainingDaysInCurrentWeekWithinMonth} días restantes dentro del mes`}
+              note={`${status.daysInCurrentWeekWithinMonth} días asignados dentro del mes`}
               value={status.currentWeekAvailableBudget}
             />
             <DetailRow
@@ -124,7 +129,7 @@ export default async function WeeklyBudgetPage() {
             />
             <DetailRow
               label="Transferido fuera de disponible esta semana"
-              note="Ya está descontado al recalcular el disponible; no se suma al gasto semanal."
+              note="Ya está descontado del disponible semanal; no se suma al gasto personal."
               value={status.currentWeekTransferredOutOfAvailable}
             />
             <DetailRow
