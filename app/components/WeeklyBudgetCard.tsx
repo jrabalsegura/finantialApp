@@ -194,6 +194,17 @@ export function WeeklyBudgetCard({
               trasladados a cuentas no disponibles.
             </p>
           ) : null}
+          {status.currentWeekBudgetAdjustment > 0 ? (
+            <p
+              className={`mt-2 text-xs ${
+                isOverBudget ? "text-rose-800" : "text-emerald-100"
+              }`}
+            >
+              El disponible también descuenta{" "}
+              {currencyFormatter.format(status.currentWeekBudgetAdjustment)}{" "}
+              fuera del gasto semanal ordinario.
+            </p>
+          ) : null}
         </>
       ) : (
         <div className="mt-5 rounded-lg bg-white/10 p-4">

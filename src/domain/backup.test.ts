@@ -75,7 +75,7 @@ function createValidBackup(): FinancialBackup {
           affectsPersonalIncome: false,
           affectsMonthlySavings: true,
           affectsNetWorth: true,
-          excludeFromWeeklyBudget: false,
+          weeklyBudgetImpactScope: "normal",
           reimbursementId: null,
           createdAt: timestamp,
           updatedAt: timestamp
@@ -214,6 +214,25 @@ test("rechaza una versión de esquema incompatible", () => {
   assert.equal(result.success, false);
   if (result.success) return;
   assert.match(result.errors.join(" "), /incompatible/);
+});
+
+test("acepta backups v5 con el booleano antiguo de exclusión semanal", () => {
+  const backup = createValidBackup() as unknown as {
+    metadata: { schemaVersion: number };
+    data: {
+      transactions: Array<{
+        weeklyBudgetImpactScope?: string;
+        excludeFromWeeklyBudget?: boolean;
+      }>;
+    };
+  };
+  backup.metadata.schemaVersion = 5;
+  delete backup.data.transactions[0].weeklyBudgetImpactScope;
+  backup.data.transactions[0].excludeFromWeeklyBudget = true;
+
+  const result = validateBackup(backup);
+
+  assert.equal(result.success, true);
 });
 
 test("rechaza backups a los que les faltan colecciones críticas", () => {

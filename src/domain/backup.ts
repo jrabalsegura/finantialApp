@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 5;
+export const BACKUP_SCHEMA_VERSION = 6;
 export const BACKUP_APP_NAME = "Finanzas personales";
 
 const ACCOUNT_TYPES = [
@@ -30,6 +30,11 @@ const REIMBURSEMENT_STATUSES = [
   "cancelled",
   "uncollectible"
 ] as const;
+const WEEKLY_BUDGET_IMPACT_SCOPES = [
+  "normal",
+  "exclude_weekly_expense",
+  "exclude_weekly_and_monthly"
+] as const;
 const RECURRING_TRANSACTION_TYPES = [
   "expense",
   "income",
@@ -60,6 +65,7 @@ type AccountType = (typeof ACCOUNT_TYPES)[number];
 type CategoryType = (typeof CATEGORY_TYPES)[number];
 type TransactionType = (typeof TRANSACTION_TYPES)[number];
 type ReimbursementStatus = (typeof REIMBURSEMENT_STATUSES)[number];
+type WeeklyBudgetImpactScope = (typeof WEEKLY_BUDGET_IMPACT_SCOPES)[number];
 type RecurringTransactionType =
   (typeof RECURRING_TRANSACTION_TYPES)[number];
 type RecurringAutoCreateMode =
@@ -121,7 +127,8 @@ export type BackupTransaction = TimestampedRecord & {
   affectsPersonalIncome: boolean;
   affectsMonthlySavings: boolean;
   affectsNetWorth: boolean;
-  excludeFromWeeklyBudget: boolean;
+  weeklyBudgetImpactScope?: WeeklyBudgetImpactScope;
+  excludeFromWeeklyBudget?: boolean;
   reimbursementId: string | null;
 };
 
@@ -301,10 +308,10 @@ export function validateBackup(input: unknown): BackupValidationResult {
 
     if (
       typeof input.metadata.schemaVersion === "number" &&
-      input.metadata.schemaVersion !== BACKUP_SCHEMA_VERSION
+      ![5, BACKUP_SCHEMA_VERSION].includes(input.metadata.schemaVersion)
     ) {
       errors.push(
-        `Versión de esquema incompatible: ${input.metadata.schemaVersion}. La aplicación admite la versión ${BACKUP_SCHEMA_VERSION}.`
+        `Versión de esquema incompatible: ${input.metadata.schemaVersion}. La aplicación admite las versiones 5 y ${BACKUP_SCHEMA_VERSION}.`
       );
     }
   }
@@ -498,11 +505,20 @@ function validateTransaction(value: unknown, path: string, errors: string[]) {
     errors
   );
   validateBoolean(value.affectsNetWorth, `${path}.affectsNetWorth`, errors);
-  validateBoolean(
-    value.excludeFromWeeklyBudget,
-    `${path}.excludeFromWeeklyBudget`,
-    errors
-  );
+  if (value.weeklyBudgetImpactScope !== undefined) {
+    validateEnum(
+      value.weeklyBudgetImpactScope,
+      WEEKLY_BUDGET_IMPACT_SCOPES,
+      `${path}.weeklyBudgetImpactScope`,
+      errors
+    );
+  } else {
+    validateBoolean(
+      value.excludeFromWeeklyBudget,
+      `${path}.excludeFromWeeklyBudget`,
+      errors
+    );
+  }
   validateOptionalString(
     value.reimbursementId,
     `${path}.reimbursementId`,

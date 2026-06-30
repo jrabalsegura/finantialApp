@@ -116,11 +116,11 @@ test("excluye movimientos marcados del objetivo semanal", () => {
     expense("regular", 80, "2026-06-10"),
     {
       ...expense("extra-expense", 300, "2026-06-10"),
-      excludeFromWeeklyBudget: true
+      weeklyBudgetImpactScope: "exclude_weekly_and_monthly"
     },
     {
       ...transfer("extra-transfer", 500, true, false, "2026-06-10"),
-      excludeFromWeeklyBudget: true
+      weeklyBudgetImpactScope: "exclude_weekly_and_monthly"
     }
   ];
   const status = getWeeklyBudgetStatus({
@@ -133,11 +133,42 @@ test("excluye movimientos marcados del objetivo semanal", () => {
   assert.equal(status.monthlyVariableExpense, 80);
   assert.equal(status.monthlyTransferredOutOfAvailable, 0);
   assert.equal(status.currentWeekVariableExpense, 80);
+  assert.equal(status.currentWeekBudgetAdjustment, 0);
   assert.deepEqual(
     status.variableExpensesForWeek.map((transaction) => transaction.id),
     ["regular"]
   );
   assert.deepEqual(status.availabilityReducingTransfersForWeek, []);
+});
+
+test("puede excluir un gasto del gasto semanal pero restarlo del disponible y del mes", () => {
+  const transactions: VariableExpenseForBudget[] = [
+    expense("regular", 80, "2026-06-10"),
+    {
+      ...expense("special", 120, "2026-06-10"),
+      weeklyBudgetImpactScope: "exclude_weekly_expense"
+    }
+  ];
+  const status = getWeeklyBudgetStatus({
+    recurringTransactions,
+    transactions,
+    setting,
+    referenceDate: new Date(2026, 5, 10, 12)
+  });
+
+  assert.equal(status.monthlyVariableExpense, 200);
+  assert.equal(status.currentWeekVariableExpense, 80);
+  assert.equal(status.currentWeekBudgetAdjustment, 120);
+  assert.equal(status.currentWeekAvailableBudget, 640.9);
+  assert.equal(status.currentWeekDifference, 560.9);
+  assert.deepEqual(
+    status.variableExpensesForWeek.map((transaction) => transaction.id),
+    ["regular"]
+  );
+  assert.deepEqual(
+    status.budgetAdjustingExpensesForWeek.map((transaction) => transaction.id),
+    ["special"]
+  );
 });
 
 test("la semana empieza en lunes y se limita al mes actual", () => {

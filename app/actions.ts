@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { AccountType, Prisma } from "@prisma/client";
+import type { AccountType, Prisma, WeeklyBudgetImpactScope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   accountFeedsLongTermBucket,
@@ -69,6 +69,11 @@ const EDITABLE_TRANSACTION_TYPES = new Set<QuickTransactionType>([
   "income",
   "transfer",
   "savings_allocation"
+]);
+const WEEKLY_BUDGET_IMPACT_SCOPES = new Set<WeeklyBudgetImpactScope>([
+  "normal",
+  "exclude_weekly_expense",
+  "exclude_weekly_and_monthly"
 ]);
 
 export async function createQuickTransaction(
@@ -153,8 +158,9 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
       ? parseRequiredString(formData.get("savingsBucketId"))
       : null;
   const description = parseOptionalString(formData.get("description"));
-  const excludeFromWeeklyBudget =
-    formData.get("excludeFromWeeklyBudget") === "on";
+  const weeklyBudgetImpactScope = parseWeeklyBudgetImpactScope(
+    formData.get("weeklyBudgetImpactScope")
+  );
 
   await prisma.$transaction(async (tx) => {
     const transaction = await getEditableTransaction(tx, id, {
@@ -202,7 +208,7 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
         date,
         description,
         destinationAccountId,
-        excludeFromWeeklyBudget,
+        weeklyBudgetImpactScope,
         savingsBucketId,
         type
       }
@@ -1605,6 +1611,23 @@ function parseEditableTransactionType(
   }
 
   return type;
+}
+
+function parseWeeklyBudgetImpactScope(
+  value: FormDataEntryValue | null
+): WeeklyBudgetImpactScope {
+  if (value == null || value === "") {
+    return "normal";
+  }
+
+  if (
+    typeof value !== "string" ||
+    !WEEKLY_BUDGET_IMPACT_SCOPES.has(value as WeeklyBudgetImpactScope)
+  ) {
+    throw new Error("Impacto en objetivo semanal no válido.");
+  }
+
+  return value as WeeklyBudgetImpactScope;
 }
 
 function parseAmount(value: FormDataEntryValue | null): number {

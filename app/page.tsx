@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { TransactionType } from "@prisma/client";
+import type { TransactionType, WeeklyBudgetImpactScope } from "@prisma/client";
 import {
   createQuickTransaction,
   deleteRecentTransaction,
@@ -18,7 +18,11 @@ import {
   NetWorthVariationCard
 } from "./components/dashboard/DashboardPanels";
 import { getDashboardData } from "@/lib/dashboard";
-import { TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
+import {
+  TRANSACTION_TYPE_LABELS,
+  WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS,
+  WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS
+} from "@/domain/domain-options";
 import {
   currencyFormatter,
   formatDateInputValue,
@@ -389,9 +393,13 @@ export default async function Home() {
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
                           {TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
-                        {transaction.excludeFromWeeklyBudget ? (
+                        {getWeeklyBudgetImpactBadgeLabel(
+                          transaction.weeklyBudgetImpactScope
+                        ) ? (
                           <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-                            Fuera del objetivo semanal
+                            {getWeeklyBudgetImpactBadgeLabel(
+                              transaction.weeklyBudgetImpactScope
+                            )}
                           </span>
                         ) : null}
                       </div>
@@ -547,16 +555,26 @@ export default async function Home() {
                                   type="text"
                                 />
                               </label>
-                              <label className="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium text-ink lg:col-span-4">
-                                <input
-                                  className="h-4 w-4 accent-emerald-700"
-                                  defaultChecked={
-                                    transaction.excludeFromWeeklyBudget
+                              <label className="field-label lg:col-span-4">
+                                Impacto en objetivo semanal
+                                <select
+                                  className="field-input"
+                                  defaultValue={
+                                    transaction.weeklyBudgetImpactScope
                                   }
-                                  name="excludeFromWeeklyBudget"
-                                  type="checkbox"
-                                />
-                                No contar en objetivo semanal
+                                  name="weeklyBudgetImpactScope"
+                                >
+                                  {WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS.map(
+                                    (option) => (
+                                      <option
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </option>
+                                    )
+                                  )}
+                                </select>
                               </label>
                               <button className="primary-button lg:col-span-2" type="submit">
                                 Guardar cambios
@@ -720,6 +738,12 @@ function formatMovementAmount(
   }
 
   return currencyFormatter.format(amount);
+}
+
+function getWeeklyBudgetImpactBadgeLabel(
+  scope: WeeklyBudgetImpactScope
+): string | null {
+  return WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS[scope];
 }
 
 function PencilIcon() {

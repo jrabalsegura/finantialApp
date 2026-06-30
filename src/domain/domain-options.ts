@@ -4,7 +4,8 @@ import type {
   RecurringOccurrenceStatus,
   RecurringTransactionType,
   ReimbursementStatus,
-  TransactionType
+  TransactionType,
+  WeeklyBudgetImpactScope
 } from "@prisma/client";
 
 export const ACCOUNT_TYPES = [
@@ -72,6 +73,36 @@ export const QUICK_TRANSACTION_TYPE_OPTIONS = QUICK_TRANSACTION_TYPES.map(
     label: QUICK_TRANSACTION_TYPE_LABELS[value]
   })
 );
+
+export const WEEKLY_BUDGET_IMPACT_SCOPES = [
+  "normal",
+  "exclude_weekly_expense",
+  "exclude_weekly_and_monthly"
+] as const satisfies ReadonlyArray<WeeklyBudgetImpactScope>;
+
+export const WEEKLY_BUDGET_IMPACT_SCOPE_LABELS: Record<
+  WeeklyBudgetImpactScope,
+  string
+> = {
+  normal: "Cuenta en semana y mes",
+  exclude_weekly_expense: "No cuenta como gasto semanal, pero reduce disponible",
+  exclude_weekly_and_monthly: "Excluir de semana y mes"
+};
+
+export const WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS: Record<
+  WeeklyBudgetImpactScope,
+  string | null
+> = {
+  normal: null,
+  exclude_weekly_expense: "Reduce disponible semanal",
+  exclude_weekly_and_monthly: "Fuera del objetivo semanal"
+};
+
+export const WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS =
+  WEEKLY_BUDGET_IMPACT_SCOPES.map((value) => ({
+    value,
+    label: WEEKLY_BUDGET_IMPACT_SCOPE_LABELS[value]
+  }));
 
 export const RECURRING_TRANSACTION_TYPES = [
   "expense",

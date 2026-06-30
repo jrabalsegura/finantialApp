@@ -133,6 +133,11 @@ export default async function WeeklyBudgetPage() {
               value={status.currentWeekTransferredOutOfAvailable}
             />
             <DetailRow
+              label="Fuera del gasto semanal, pero reduce disponible"
+              note="No cuenta como gasto ordinario de la semana; sí ajusta el dinero disponible."
+              value={status.currentWeekBudgetAdjustment}
+            />
+            <DetailRow
               label="Diferencia semanal"
               value={status.currentWeekDifference}
             />
@@ -150,6 +155,49 @@ export default async function WeeklyBudgetPage() {
             items={report.fixedExpenseItems}
             title="Gastos fijos considerados"
           />
+        </section>
+
+        <section className="rounded-lg border border-line bg-white shadow-sm">
+          <div className="border-b border-line px-4 py-4 sm:px-5">
+            <h2 className="text-lg font-semibold text-ink">
+              Ajustes que reducen el disponible semanal
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              Gastos que no se miden contra el objetivo semanal ordinario, pero
+              sí dejan menos margen esta semana y en el mes.
+            </p>
+          </div>
+          {report.budgetAdjustingExpensesForWeek.length > 0 ? (
+            <ul className="divide-y divide-line">
+              {report.budgetAdjustingExpensesForWeek.map((transaction) => (
+                <li
+                  className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                  key={transaction.id}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      {transaction.description}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {transaction.accountName}
+                      {transaction.categoryName
+                        ? ` · ${transaction.categoryName}`
+                        : ""}
+                      {" · "}
+                      {dateFormatter.format(transaction.date)}
+                    </p>
+                  </div>
+                  <p className="text-lg font-semibold text-amber-700">
+                    {currencyFormatter.format(transaction.amount)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-4 py-8 text-sm text-muted sm:px-5">
+              No hay ajustes de este tipo en la semana actual.
+            </div>
+          )}
         </section>
 
         <section className="rounded-lg border border-line bg-white shadow-sm">

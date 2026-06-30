@@ -71,7 +71,7 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
         type: true,
         description: true,
         affectsPersonalExpense: true,
-        excludeFromWeeklyBudget: true,
+        weeklyBudgetImpactScope: true,
         account: {
           select: {
             name: true,
@@ -127,6 +127,9 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
       (transaction) => transaction.id
     )
   );
+  const includedBudgetAdjustmentIds = new Set(
+    status.budgetAdjustingExpensesForWeek.map((transaction) => transaction.id)
+  );
 
   return {
     setting: {
@@ -167,6 +170,20 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
         accountName: transaction.account.name,
         destinationAccountName:
           transaction.destinationAccount?.name ?? "Cuenta no disponible"
+      })),
+    budgetAdjustingExpensesForWeek: transactions
+      .filter((transaction) => includedBudgetAdjustmentIds.has(transaction.id))
+      .map((transaction) => ({
+        id: transaction.id,
+        date: transaction.date,
+        amount: toMoneyNumber(transaction.amount),
+        description:
+          transaction.description ??
+          transaction.category?.name ??
+          "Gasto fuera del objetivo semanal",
+        accountName: transaction.account.name,
+        categoryName: transaction.category?.name ?? null,
+        type: transaction.type
       }))
   };
 }

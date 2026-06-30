@@ -81,6 +81,12 @@ enum WeeklyBudgetCalculationMode {
   remaining_days
 }
 
+enum WeeklyBudgetImpactScope {
+  normal
+  exclude_weekly_expense
+  exclude_weekly_and_monthly
+}
+
 model AppUser {
   id           String   @id @default(cuid())
   username     String   @unique
@@ -173,7 +179,7 @@ model Transaction {
   affectsPersonalIncome   Boolean         @default(false)
   affectsMonthlySavings   Boolean         @default(false)
   affectsNetWorth         Boolean         @default(true)
-  excludeFromWeeklyBudget Boolean         @default(false)
+  weeklyBudgetImpactScope WeeklyBudgetImpactScope @default(normal)
   reimbursementId         String?
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt

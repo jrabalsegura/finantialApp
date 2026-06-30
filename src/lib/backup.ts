@@ -184,19 +184,30 @@ export async function importBackup(input: unknown): Promise<void> {
         }))
       });
       await tx.transaction.createMany({
-        data: data.transactions.map(({
-          monthlyCloseId: _ignoredClose,
-          reimbursementId: _ignored,
-          ...record
-        }) => ({
-          ...record,
-          monthlyCloseId: null,
-          reimbursementId: null,
-          date: new Date(record.date),
-          amount: record.amount,
-          createdAt: new Date(record.createdAt),
-          updatedAt: new Date(record.updatedAt)
-        }))
+        data: data.transactions.map((transaction) => {
+          const {
+            excludeFromWeeklyBudget,
+            monthlyCloseId: _ignoredClose,
+            reimbursementId: _ignored,
+            weeklyBudgetImpactScope,
+            ...record
+          } = transaction;
+
+          return {
+            ...record,
+            weeklyBudgetImpactScope:
+              weeklyBudgetImpactScope ??
+              (excludeFromWeeklyBudget
+                ? "exclude_weekly_and_monthly"
+                : "normal"),
+            monthlyCloseId: null,
+            reimbursementId: null,
+            date: new Date(record.date),
+            amount: record.amount,
+            createdAt: new Date(record.createdAt),
+            updatedAt: new Date(record.updatedAt)
+          };
+        })
       });
       await tx.reimbursement.createMany({
         data: data.reimbursements.map((record) => ({

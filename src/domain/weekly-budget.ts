@@ -9,6 +9,10 @@ import { currencyFormatter } from "@/lib/formatters";
 export type WeeklyBudgetCalculationMode =
   | "full_month_proportional"
   | "remaining_days";
+export type WeeklyBudgetImpactScope =
+  | "normal"
+  | "exclude_weekly_expense"
+  | "exclude_weekly_and_monthly";
 
 export type BudgetSettingForCalculation = {
   monthlyMinimumSavingsTarget: MoneyValue;
@@ -36,6 +40,7 @@ export type VariableExpenseForBudget = {
   amount: MoneyValue;
   type: TransactionType;
   affectsPersonalExpense: boolean;
+  weeklyBudgetImpactScope?: WeeklyBudgetImpactScope;
   excludeFromWeeklyBudget?: boolean;
   recurringOccurrenceId?: string | null;
   isPending?: boolean;
@@ -62,11 +67,13 @@ export type WeeklyBudgetStatus = {
   currentWeekAvailableBudget: number;
   currentWeekVariableExpense: number;
   currentWeekTransferredOutOfAvailable: number;
+  currentWeekBudgetAdjustment: number;
   currentWeekDifference: number;
   percentageUsed: number | null;
   message: string;
   variableExpensesForWeek: VariableExpenseForBudget[];
   availabilityReducingTransfersForWeek: VariableExpenseForBudget[];
+  budgetAdjustingExpensesForWeek: VariableExpenseForBudget[];
 };
 
 const EXCLUDED_VARIABLE_EXPENSE_TYPES = new Set<TransactionType>([
@@ -157,7 +164,7 @@ export function getVariableExpensesForWeek(
     return (
       date >= rangeStart &&
       date <= rangeEnd &&
-      isVariableExpense(transaction, setting)
+      isWeeklyVariableExpense(transaction, setting)
     );
   });
 }
@@ -199,6 +206,35 @@ export function getAvailabilityReducingTransfersForWeek(
       date >= rangeStart &&
       date <= rangeEnd &&
       isAvailabilityReducingTransfer(transaction, setting)
+    );
+  });
+}
+
+export function getBudgetAdjustingExpensesForWeek(
+  transactions: VariableExpenseForBudget[],
+  referenceDate: Date,
+  setting: Pick<
+    BudgetSettingForCalculation,
+    "includePendingTransactions" | "includeReimbursableExpenses"
+  >
+): VariableExpenseForBudget[] {
+  const rangeStart = maxDate(
+    startOfWeek(referenceDate),
+    startOfMonth(referenceDate)
+  );
+  const rangeEnd = minDate(
+    endOfWeek(referenceDate),
+    endOfMonth(referenceDate),
+    endOfDay(referenceDate)
+  );
+
+  return transactions.filter((transaction) => {
+    const date = new Date(transaction.date);
+    return (
+      date >= rangeStart &&
+      date <= rangeEnd &&
+      getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_expense" &&
+      isBaseVariableExpense(transaction, setting)
     );
   });
 }
@@ -251,6 +287,11 @@ export function getWeeklyBudgetStatus({
     referenceDate,
     setting
   );
+  const weekBudgetAdjustments = getBudgetAdjustingExpensesForWeek(
+    transactions,
+    referenceDate,
+    setting
+  );
   const monthlyVariableExpense = sumExpenses(monthExpenses);
   const currentWeekVariableExpense = sumExpenses(weekExpenses);
   const monthlyTransferredOutOfAvailable = sumExpenses(
@@ -259,6 +300,7 @@ export function getWeeklyBudgetStatus({
   const currentWeekTransferredOutOfAvailable = sumExpenses(
     weekAvailabilityTransfers
   );
+  const currentWeekBudgetAdjustment = sumExpenses(weekBudgetAdjustments);
   const remainingVariableBudget = roundMoney(
     monthlyVariableBudget -
       monthlyVariableExpense -
@@ -311,7 +353,8 @@ export function getWeeklyBudgetStatus({
       : divideMoney(monthlyVariableBudget, daysInMonth(referenceDate));
   const currentWeekAvailableBudget = roundMoney(
     dailyAvailableBudget * daysInCurrentWeekWithinMonth -
-      currentWeekTransferredOutOfAvailable
+      currentWeekTransferredOutOfAvailable -
+      currentWeekBudgetAdjustment
   );
   const currentWeekDifference = roundMoney(
     currentWeekAvailableBudget - currentWeekVariableExpense
@@ -348,6 +391,7 @@ export function getWeeklyBudgetStatus({
     currentWeekAvailableBudget,
     currentWeekVariableExpense,
     currentWeekTransferredOutOfAvailable,
+    currentWeekBudgetAdjustment,
     currentWeekDifference,
     percentageUsed,
     message: getStatusMessage({
@@ -357,7 +401,8 @@ export function getWeeklyBudgetStatus({
       percentageUsed
     }),
     variableExpensesForWeek: weekExpenses,
-    availabilityReducingTransfersForWeek: weekAvailabilityTransfers
+    availabilityReducingTransfersForWeek: weekAvailabilityTransfers,
+    budgetAdjustingExpensesForWeek: weekBudgetAdjustments
   };
 }
 
@@ -409,10 +454,53 @@ function isVariableExpense(
     "includePendingTransactions" | "includeReimbursableExpenses"
   >
 ): boolean {
-  if (transaction.excludeFromWeeklyBudget) {
+  if (getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_and_monthly") {
     return false;
   }
 
+  return isBaseVariableExpense(transaction, setting);
+}
+
+function isWeeklyVariableExpense(
+  transaction: VariableExpenseForBudget,
+  setting: Pick<
+    BudgetSettingForCalculation,
+    "includePendingTransactions" | "includeReimbursableExpenses"
+  >
+): boolean {
+  if (getWeeklyBudgetImpactScope(transaction) !== "normal") {
+    return false;
+  }
+
+  return isBaseVariableExpense(transaction, setting);
+}
+
+function isAvailabilityReducingTransfer(
+  transaction: VariableExpenseForBudget,
+  setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
+): boolean {
+  if (getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_and_monthly") {
+    return false;
+  }
+
+  if (transaction.isPending && !setting.includePendingTransactions) {
+    return false;
+  }
+
+  return (
+    transaction.type === "transfer" &&
+    transaction.sourceAccountIncludeInAvailableMoney === true &&
+    transaction.destinationAccountIncludeInAvailableMoney === false
+  );
+}
+
+function isBaseVariableExpense(
+  transaction: VariableExpenseForBudget,
+  setting: Pick<
+    BudgetSettingForCalculation,
+    "includePendingTransactions" | "includeReimbursableExpenses"
+  >
+): boolean {
   if (transaction.isPending && !setting.includePendingTransactions) {
     return false;
   }
@@ -432,23 +520,16 @@ function isVariableExpense(
   );
 }
 
-function isAvailabilityReducingTransfer(
-  transaction: VariableExpenseForBudget,
-  setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
-): boolean {
-  if (transaction.excludeFromWeeklyBudget) {
-    return false;
+function getWeeklyBudgetImpactScope(
+  transaction: VariableExpenseForBudget
+): WeeklyBudgetImpactScope {
+  if (transaction.weeklyBudgetImpactScope) {
+    return transaction.weeklyBudgetImpactScope;
   }
 
-  if (transaction.isPending && !setting.includePendingTransactions) {
-    return false;
-  }
-
-  return (
-    transaction.type === "transfer" &&
-    transaction.sourceAccountIncludeInAvailableMoney === true &&
-    transaction.destinationAccountIncludeInAvailableMoney === false
-  );
+  return transaction.excludeFromWeeklyBudget
+    ? "exclude_weekly_and_monthly"
+    : "normal";
 }
 
 function getStatusMessage({
