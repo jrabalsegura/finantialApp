@@ -174,6 +174,9 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
         "No se puede cambiar el tipo de un movimiento fijo confirmado."
       );
     }
+    const effectiveWeeklyBudgetImpactScope = transaction.recurringOccurrence
+      ? "normal"
+      : weeklyBudgetImpactScope;
 
     await reverseEditableTransaction(tx, transaction);
 
@@ -210,7 +213,7 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
         date,
         description,
         destinationAccountId,
-        weeklyBudgetImpactScope,
+        weeklyBudgetImpactScope: effectiveWeeklyBudgetImpactScope,
         savingsBucketId,
         type
       }

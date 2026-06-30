@@ -392,9 +392,13 @@ export default async function Home() {
                         <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
                           {TRANSACTION_TYPE_LABELS[transaction.type]}
                         </span>
-                        {getWeeklyBudgetImpactBadgeLabel(
-                          transaction.weeklyBudgetImpactScope
-                        ) ? (
+                        {isConfirmedRecurring ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800">
+                            {getRecurringBudgetBadgeLabel(transaction.type)}
+                          </span>
+                        ) : getWeeklyBudgetImpactBadgeLabel(
+                            transaction.weeklyBudgetImpactScope
+                          ) ? (
                           <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
                             {getWeeklyBudgetImpactBadgeLabel(
                               transaction.weeklyBudgetImpactScope
@@ -554,27 +558,42 @@ export default async function Home() {
                                   type="text"
                                 />
                               </label>
-                              <label className="field-label lg:col-span-4">
-                                Impacto en objetivo semanal
-                                <select
-                                  className="field-input"
-                                  defaultValue={
-                                    transaction.weeklyBudgetImpactScope
-                                  }
-                                  name="weeklyBudgetImpactScope"
-                                >
-                                  {getWeeklyBudgetImpactOptions(
-                                    transaction.type
-                                  ).map((option) => (
-                                    <option
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
+                              {isConfirmedRecurring ? (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 lg:col-span-4">
+                                  <p className="font-semibold">
+                                    {getRecurringBudgetBadgeLabel(
+                                      transaction.type
+                                    )}
+                                  </p>
+                                  <p className="mt-1 text-xs leading-5 text-emerald-800">
+                                    Este movimiento viene de una regla fija. El
+                                    objetivo semanal lo calcula desde la regla
+                                    recurrente, no desde esta copia confirmada.
+                                  </p>
+                                </div>
+                              ) : (
+                                <label className="field-label lg:col-span-4">
+                                  Impacto en objetivo semanal
+                                  <select
+                                    className="field-input"
+                                    defaultValue={
+                                      transaction.weeklyBudgetImpactScope
+                                    }
+                                    name="weeklyBudgetImpactScope"
+                                  >
+                                    {getWeeklyBudgetImpactOptions(
+                                      transaction.type
+                                    ).map((option) => (
+                                      <option
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
                               <button className="primary-button lg:col-span-2" type="submit">
                                 Guardar cambios
                               </button>
@@ -743,6 +762,18 @@ function getWeeklyBudgetImpactBadgeLabel(
   scope: WeeklyBudgetImpactScope
 ): string | null {
   return WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS[scope];
+}
+
+function getRecurringBudgetBadgeLabel(type: TransactionType): string {
+  if (type === "income") {
+    return "Ingreso fijo ya incluido";
+  }
+
+  if (type === "expense") {
+    return "Gasto fijo ya incluido";
+  }
+
+  return "Movimiento fijo";
 }
 
 function getWeeklyBudgetImpactOptions(type: TransactionType): Array<{
