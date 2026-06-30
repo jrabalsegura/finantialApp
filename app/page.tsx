@@ -40,6 +40,7 @@ export default async function Home() {
     recentTransactions,
     savingsBuckets,
     weeklyBudgetReport,
+    currentMonthClose,
     defaultAccountId,
     availableMoney,
     netWorth,
@@ -117,7 +118,14 @@ export default async function Home() {
           </div>
         </header>
 
-        <WeeklyBudgetCard status={weeklyBudgetReport.status} />
+        <WeeklyBudgetCard
+          closedMonthHref={`/monthly-close?period=${currentYear}-${String(
+            currentMonth
+          ).padStart(2, "0")}`}
+          isMonthClosed={currentMonthClose !== null}
+          monthLabel={capitalize(monthFormatter.format(today))}
+          status={weeklyBudgetReport.status}
+        />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           <section className="order-2 grid gap-6 lg:order-1">

@@ -82,6 +82,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     reimbursements,
     savingsBuckets,
     monthlyCloses,
+    currentMonthClose,
     recurringOccurrences,
     quickTemplates,
     weeklyBudgetReport
@@ -177,6 +178,18 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         netWorth: true
       }
     }),
+    prisma.monthlyClose.findUnique({
+      where: {
+        year_month: {
+          year: currentYear,
+          month: currentMonth
+        }
+      },
+      select: {
+        id: true,
+        closedAt: true
+      }
+    }),
     prisma.recurringTransactionOccurrence.findMany({
       where: {
         year: currentYear,
@@ -251,6 +264,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     reimbursements,
     savingsBuckets: displaySavingsBuckets,
     weeklyBudgetReport,
+    currentMonthClose,
     defaultAccountId: defaultAccount?.id ?? null,
     availableMoney: calculateAvailableMoney(accounts),
     netWorth: calculateNetWorth(accounts, reimbursements),

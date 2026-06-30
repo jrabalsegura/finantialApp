@@ -5,10 +5,49 @@ import { currencyFormatter } from "@/lib/formatters";
 const WEEKLY_VISIBLE_BUDGET_CAP = 500;
 
 export function WeeklyBudgetCard({
+  closedMonthHref = "/monthly-close",
+  isMonthClosed = false,
+  monthLabel,
   status
 }: {
+  closedMonthHref?: string;
+  isMonthClosed?: boolean;
+  monthLabel?: string;
   status: WeeklyBudgetStatus;
 }) {
+  if (isMonthClosed) {
+    return (
+      <Link
+        className="block overflow-hidden rounded-xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-6"
+        href={closedMonthHref}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-accent">
+              Objetivo semanal
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-ink sm:text-2xl">
+              Mes cerrado
+            </h2>
+          </div>
+          <span className="shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-ink">
+            Ver cierre
+          </span>
+        </div>
+        <div className="mt-5 rounded-lg bg-surface p-4">
+          <p className="text-sm font-semibold text-ink">
+            {monthLabel
+              ? `${monthLabel} ya está cerrado.`
+              : "Este mes ya está cerrado."}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            El gasto semanal queda pausado y se recalculará con el próximo mes.
+          </p>
+        </div>
+      </Link>
+    );
+  }
+
   const visibleAvailableBudget = getVisibleAvailableBudget(
     status.currentWeekAvailableBudget
   );
