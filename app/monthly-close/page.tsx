@@ -30,12 +30,21 @@ type ExistingMonthlyClose = {
   }>;
   bucketSnapshots: Array<{
     amount: MoneyValue;
-    savingsBucket: { name: string };
+    savingsBucket: { isLongTerm: boolean; name: string };
+    savingsBucketId: string;
   }>;
   monthlySavings: MoneyValue;
+  notes: string | null;
   totalExpense: MoneyValue;
   totalIncome: MoneyValue;
 };
+
+type PreviousMonthlyCloseForComparison = {
+  bucketSnapshots: Array<{
+    amount: MoneyValue;
+    savingsBucketId: string;
+  }>;
+} | null;
 
 export default async function MonthlyClosePage({
   searchParams
@@ -62,6 +71,7 @@ export default async function MonthlyClosePage({
     savingsBuckets,
     monthlyTransactions,
     existingClose,
+    previousCloseForComparison,
     latestClose,
     pendingRecurringCount
   ] = await Promise.all([
@@ -149,9 +159,30 @@ export default async function MonthlyClosePage({
           include: {
             savingsBucket: {
               select: {
+                isLongTerm: true,
                 name: true
               }
             }
+          }
+        }
+      }
+    }),
+    prisma.monthlyClose.findFirst({
+      where: {
+        OR: [
+          { year: { lt: selectedPeriod.year } },
+          {
+            year: selectedPeriod.year,
+            month: { lt: selectedPeriod.month }
+          }
+        ]
+      },
+      orderBy: [{ year: "desc" }, { month: "desc" }],
+      select: {
+        bucketSnapshots: {
+          select: {
+            amount: true,
+            savingsBucketId: true
           }
         }
       }
@@ -250,6 +281,7 @@ export default async function MonthlyClosePage({
           <ExistingClose
             close={existingClose}
             isLatestClose={latestClose?.id === existingClose.id}
+            previousClose={previousCloseForComparison}
             returnTo={`/monthly-close?period=${formatPeriodValue(selectedPeriod)}`}
           />
         ) : (
@@ -289,12 +321,22 @@ export default async function MonthlyClosePage({
 function ExistingClose({
   close,
   isLatestClose,
+  previousClose,
   returnTo
 }: {
   close: ExistingMonthlyClose;
   isLatestClose: boolean;
+  previousClose: PreviousMonthlyCloseForComparison;
   returnTo: string;
 }) {
+  const previousBucketAmountById = new Map(
+    previousClose?.bucketSnapshots.map((snapshot) => [
+      snapshot.savingsBucketId,
+      toMoneyNumber(snapshot.amount)
+    ]) ?? []
+  );
+  const closeNotes = close.notes?.trim();
+
   return (
     <div className="grid gap-6">
       <section className="grid gap-3 sm:grid-cols-3">
@@ -359,19 +401,36 @@ function ExistingClose({
         </div>
         {close.bucketSnapshots.length > 0 ? (
           <ul className="divide-y divide-line">
-            {close.bucketSnapshots.map((snapshot) => (
-              <li
-                className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
-                key={snapshot.savingsBucket.name}
-              >
-                <p className="amount-text text-sm font-semibold text-ink sm:text-right">
-                  {snapshot.savingsBucket.name}
-                </p>
-                <p className="text-sm font-semibold text-ink">
-                  {currencyFormatter.format(toMoneyNumber(snapshot.amount))}
-                </p>
-              </li>
-            ))}
+            {close.bucketSnapshots.map((snapshot) => {
+              const amount = toMoneyNumber(snapshot.amount);
+              const previousAmount = previousBucketAmountById.get(
+                snapshot.savingsBucketId
+              );
+              const variation =
+                previousAmount == null ? null : roundMoney(amount - previousAmount);
+
+              return (
+                <li
+                  className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:px-5"
+                  key={snapshot.savingsBucketId}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      {snapshot.savingsBucket.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {snapshot.savingsBucket.isLongTerm
+                        ? "Largo plazo"
+                        : "Ahorro general"}
+                    </p>
+                  </div>
+                  <p className="amount-text text-sm font-semibold text-ink sm:text-right">
+                    {currencyFormatter.format(amount)}
+                  </p>
+                  <BucketVariation value={variation} />
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="px-4 py-8 text-sm text-muted sm:px-5">
@@ -379,6 +438,15 @@ function ExistingClose({
           </div>
         )}
       </section>
+
+      {closeNotes ? (
+        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+          <h2 className="text-lg font-semibold text-ink">Notas del cierre</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted">
+            {closeNotes}
+          </p>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -401,6 +469,39 @@ function UndoMonthlyCloseForm({
         Deshacer cierre
       </ConfirmSubmitButton>
     </form>
+  );
+}
+
+function BucketVariation({ value }: { value: number | null }) {
+  if (value === null) {
+    return (
+      <p className="text-sm font-medium text-muted sm:text-right">
+        Sin cierre anterior
+      </p>
+    );
+  }
+
+  if (value === 0) {
+    return (
+      <p className="amount-text text-sm font-semibold text-muted sm:text-right">
+        Sin cambios
+      </p>
+    );
+  }
+
+  const isPositive = value > 0;
+
+  return (
+    <p
+      className={`amount-text text-sm font-semibold sm:text-right ${
+        isPositive ? "text-emerald-700" : "text-rose-700"
+      }`}
+    >
+      {isPositive ? "Sube " : "Baja "}
+      {isPositive
+        ? `+${currencyFormatter.format(value)}`
+        : currencyFormatter.format(value)}
+    </p>
   );
 }
 
@@ -447,4 +548,8 @@ function formatPeriodValue(period: { month: number; year: number }): string {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
