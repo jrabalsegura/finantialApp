@@ -93,6 +93,11 @@ export default async function WeeklyBudgetPage() {
               value={status.monthlyVariableBudget}
             />
             <DetailRow
+              label="Ingresos extra incluidos"
+              note="Solo movimientos puntuales marcados para entrar en el objetivo."
+              value={status.monthlyExtraIncome}
+            />
+            <DetailRow
               label="Gasto variable acumulado del mes"
               value={status.monthlyVariableExpense}
             />
@@ -138,6 +143,11 @@ export default async function WeeklyBudgetPage() {
               value={status.currentWeekBudgetAdjustment}
             />
             <DetailRow
+              label="Ingresos extra disponibles esta semana"
+              note="Ingresos puntuales marcados para entrar también en esta semana."
+              value={status.currentWeekExtraIncome}
+            />
+            <DetailRow
               label="Diferencia semanal"
               value={status.currentWeekDifference}
             />
@@ -155,6 +165,49 @@ export default async function WeeklyBudgetPage() {
             items={report.fixedExpenseItems}
             title="Gastos fijos considerados"
           />
+        </section>
+
+        <section className="rounded-lg border border-line bg-white shadow-sm">
+          <div className="border-b border-line px-4 py-4 sm:px-5">
+            <h2 className="text-lg font-semibold text-ink">
+              Ingresos extra incluidos esta semana
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              Ingresos puntuales que aumentan el presupuesto del mes y también
+              el disponible de esta semana.
+            </p>
+          </div>
+          {report.extraIncomesForWeek.length > 0 ? (
+            <ul className="divide-y divide-line">
+              {report.extraIncomesForWeek.map((transaction) => (
+                <li
+                  className="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5"
+                  key={transaction.id}
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-ink">
+                      {transaction.description}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {transaction.accountName}
+                      {transaction.categoryName
+                        ? ` · ${transaction.categoryName}`
+                        : ""}
+                      {" · "}
+                      {dateFormatter.format(transaction.date)}
+                    </p>
+                  </div>
+                  <p className="text-lg font-semibold text-emerald-700">
+                    {currencyFormatter.format(transaction.amount)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-4 py-8 text-sm text-muted sm:px-5">
+              No hay ingresos extra incluidos en la semana actual.
+            </div>
+          )}
         </section>
 
         <section className="rounded-lg border border-line bg-white shadow-sm">

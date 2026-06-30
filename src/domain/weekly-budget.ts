@@ -12,7 +12,8 @@ export type WeeklyBudgetCalculationMode =
 export type WeeklyBudgetImpactScope =
   | "normal"
   | "exclude_weekly_expense"
-  | "exclude_weekly_and_monthly";
+  | "exclude_weekly_and_monthly"
+  | "include_weekly_and_monthly_income";
 
 export type BudgetSettingForCalculation = {
   monthlyMinimumSavingsTarget: MoneyValue;
@@ -40,6 +41,7 @@ export type VariableExpenseForBudget = {
   amount: MoneyValue;
   type: TransactionType;
   affectsPersonalExpense: boolean;
+  affectsPersonalIncome?: boolean;
   weeklyBudgetImpactScope?: WeeklyBudgetImpactScope;
   excludeFromWeeklyBudget?: boolean;
   recurringOccurrenceId?: string | null;
@@ -54,6 +56,7 @@ export type WeeklyBudgetStatus = {
   fixedMonthlyExpenses: number;
   monthlyMinimumSavingsTarget: number;
   monthlyVariableBudget: number;
+  monthlyExtraIncome: number;
   monthlyVariableExpense: number;
   monthlyTransferredOutOfAvailable: number;
   remainingVariableBudget: number;
@@ -68,12 +71,14 @@ export type WeeklyBudgetStatus = {
   currentWeekVariableExpense: number;
   currentWeekTransferredOutOfAvailable: number;
   currentWeekBudgetAdjustment: number;
+  currentWeekExtraIncome: number;
   currentWeekDifference: number;
   percentageUsed: number | null;
   message: string;
   variableExpensesForWeek: VariableExpenseForBudget[];
   availabilityReducingTransfersForWeek: VariableExpenseForBudget[];
   budgetAdjustingExpensesForWeek: VariableExpenseForBudget[];
+  extraIncomesForWeek: VariableExpenseForBudget[];
 };
 
 const EXCLUDED_VARIABLE_EXPENSE_TYPES = new Set<TransactionType>([
@@ -239,6 +244,53 @@ export function getBudgetAdjustingExpensesForWeek(
   });
 }
 
+export function getExtraIncomesForMonth(
+  transactions: VariableExpenseForBudget[],
+  referenceDate: Date,
+  setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
+): VariableExpenseForBudget[] {
+  const monthStart = startOfMonth(referenceDate);
+  const monthEnd = endOfMonth(referenceDate);
+  const throughToday = endOfDay(referenceDate);
+
+  return transactions.filter((transaction) => {
+    const date = new Date(transaction.date);
+    return (
+      date >= monthStart &&
+      date <= monthEnd &&
+      date <= throughToday &&
+      isIncludedExtraIncome(transaction, setting)
+    );
+  });
+}
+
+export function getExtraIncomesForWeek(
+  transactions: VariableExpenseForBudget[],
+  referenceDate: Date,
+  setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
+): VariableExpenseForBudget[] {
+  const rangeStart = maxDate(
+    startOfWeek(referenceDate),
+    startOfMonth(referenceDate)
+  );
+  const rangeEnd = minDate(
+    endOfWeek(referenceDate),
+    endOfMonth(referenceDate),
+    endOfDay(referenceDate)
+  );
+
+  return transactions.filter((transaction) => {
+    const date = new Date(transaction.date);
+    return (
+      date >= rangeStart &&
+      date <= rangeEnd &&
+      getWeeklyBudgetImpactScope(transaction) ===
+        "include_weekly_and_monthly_income" &&
+      isBaseExtraIncome(transaction, setting)
+    );
+  });
+}
+
 export function getWeeklyBudgetStatus({
   recurringTransactions,
   referenceDate = new Date(),
@@ -292,6 +344,17 @@ export function getWeeklyBudgetStatus({
     referenceDate,
     setting
   );
+  const monthExtraIncomes = getExtraIncomesForMonth(
+    transactions,
+    referenceDate,
+    setting
+  );
+  const weekExtraIncomes = getExtraIncomesForWeek(
+    transactions,
+    referenceDate,
+    setting
+  );
+  const monthlyExtraIncome = sumExpenses(monthExtraIncomes);
   const monthlyVariableExpense = sumExpenses(monthExpenses);
   const currentWeekVariableExpense = sumExpenses(weekExpenses);
   const monthlyTransferredOutOfAvailable = sumExpenses(
@@ -301,10 +364,12 @@ export function getWeeklyBudgetStatus({
     weekAvailabilityTransfers
   );
   const currentWeekBudgetAdjustment = sumExpenses(weekBudgetAdjustments);
+  const currentWeekExtraIncome = sumExpenses(weekExtraIncomes);
   const remainingVariableBudget = roundMoney(
     monthlyVariableBudget -
       monthlyVariableExpense -
-      monthlyTransferredOutOfAvailable
+      monthlyTransferredOutOfAvailable +
+      monthlyExtraIncome
   );
   const monthEnd = endOfMonth(referenceDate);
   const monthStart = startOfMonth(referenceDate);
@@ -326,10 +391,16 @@ export function getWeeklyBudgetStatus({
       (transaction) => new Date(transaction.date) < weekRangeStart
     )
   );
+  const priorWeekExtraIncome = sumExpenses(
+    monthExtraIncomes.filter(
+      (transaction) => new Date(transaction.date) < weekRangeStart
+    )
+  );
   const remainingVariableBudgetAtWeekStart = roundMoney(
     monthlyVariableBudget -
       priorWeekVariableExpense -
-      priorWeekTransferredOutOfAvailable
+      priorWeekTransferredOutOfAvailable +
+      priorWeekExtraIncome
   );
   const daysInCurrentWeekWithinMonth = countDaysInclusive(
     weekRangeStart,
@@ -354,7 +425,8 @@ export function getWeeklyBudgetStatus({
   const currentWeekAvailableBudget = roundMoney(
     dailyAvailableBudget * daysInCurrentWeekWithinMonth -
       currentWeekTransferredOutOfAvailable -
-      currentWeekBudgetAdjustment
+      currentWeekBudgetAdjustment +
+      currentWeekExtraIncome
   );
   const currentWeekDifference = roundMoney(
     currentWeekAvailableBudget - currentWeekVariableExpense
@@ -378,6 +450,7 @@ export function getWeeklyBudgetStatus({
     fixedMonthlyExpenses,
     monthlyMinimumSavingsTarget,
     monthlyVariableBudget,
+    monthlyExtraIncome,
     monthlyVariableExpense,
     monthlyTransferredOutOfAvailable,
     remainingVariableBudget,
@@ -392,6 +465,7 @@ export function getWeeklyBudgetStatus({
     currentWeekVariableExpense,
     currentWeekTransferredOutOfAvailable,
     currentWeekBudgetAdjustment,
+    currentWeekExtraIncome,
     currentWeekDifference,
     percentageUsed,
     message: getStatusMessage({
@@ -402,7 +476,8 @@ export function getWeeklyBudgetStatus({
     }),
     variableExpensesForWeek: weekExpenses,
     availabilityReducingTransfersForWeek: weekAvailabilityTransfers,
-    budgetAdjustingExpensesForWeek: weekBudgetAdjustments
+    budgetAdjustingExpensesForWeek: weekBudgetAdjustments,
+    extraIncomesForWeek: weekExtraIncomes
   };
 }
 
@@ -517,6 +592,36 @@ function isBaseVariableExpense(
     transaction.type === "expense" &&
     transaction.affectsPersonalExpense &&
     !EXCLUDED_VARIABLE_EXPENSE_TYPES.has(transaction.type)
+  );
+}
+
+function isIncludedExtraIncome(
+  transaction: VariableExpenseForBudget,
+  setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
+): boolean {
+  const scope = getWeeklyBudgetImpactScope(transaction);
+
+  return (
+    scope === "include_weekly_and_monthly_income" &&
+    isBaseExtraIncome(transaction, setting)
+  );
+}
+
+function isBaseExtraIncome(
+  transaction: VariableExpenseForBudget,
+  setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
+): boolean {
+  if (transaction.isPending && !setting.includePendingTransactions) {
+    return false;
+  }
+
+  if (transaction.recurringOccurrenceId) {
+    return false;
+  }
+
+  return (
+    transaction.type === "income" &&
+    transaction.affectsPersonalIncome !== false
   );
 }
 

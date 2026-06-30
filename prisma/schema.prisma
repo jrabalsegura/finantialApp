@@ -85,6 +85,7 @@ enum WeeklyBudgetImpactScope {
   normal
   exclude_weekly_expense
   exclude_weekly_and_monthly
+  include_weekly_and_monthly_income
 }
 
 model AppUser {

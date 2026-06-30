@@ -205,6 +205,17 @@ export function WeeklyBudgetCard({
               fuera del gasto semanal ordinario.
             </p>
           ) : null}
+          {status.currentWeekExtraIncome > 0 ? (
+            <p
+              className={`mt-2 text-xs ${
+                isOverBudget ? "text-rose-800" : "text-emerald-100"
+              }`}
+            >
+              El disponible suma{" "}
+              {currencyFormatter.format(status.currentWeekExtraIncome)} de
+              ingresos extra incluidos esta semana.
+            </p>
+          ) : null}
         </>
       ) : (
         <div className="mt-5 rounded-lg bg-white/10 p-4">

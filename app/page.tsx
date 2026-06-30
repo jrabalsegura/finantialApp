@@ -20,8 +20,7 @@ import {
 import { getDashboardData } from "@/lib/dashboard";
 import {
   TRANSACTION_TYPE_LABELS,
-  WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS,
-  WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS
+  WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS
 } from "@/domain/domain-options";
 import {
   currencyFormatter,
@@ -564,16 +563,16 @@ export default async function Home() {
                                   }
                                   name="weeklyBudgetImpactScope"
                                 >
-                                  {WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS.map(
-                                    (option) => (
-                                      <option
-                                        key={option.value}
-                                        value={option.value}
-                                      >
-                                        {option.label}
-                                      </option>
-                                    )
-                                  )}
+                                  {getWeeklyBudgetImpactOptions(
+                                    transaction.type
+                                  ).map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </option>
+                                  ))}
                                 </select>
                               </label>
                               <button className="primary-button lg:col-span-2" type="submit">
@@ -744,6 +743,41 @@ function getWeeklyBudgetImpactBadgeLabel(
   scope: WeeklyBudgetImpactScope
 ): string | null {
   return WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS[scope];
+}
+
+function getWeeklyBudgetImpactOptions(type: TransactionType): Array<{
+  value: WeeklyBudgetImpactScope;
+  label: string;
+}> {
+  if (type === "income") {
+    return [
+      { value: "normal", label: "No contar en objetivo semanal" },
+      {
+        value: "include_weekly_and_monthly_income",
+        label: "Cuenta en semana y mes"
+      }
+    ];
+  }
+
+  if (type === "transfer") {
+    return [
+      { value: "normal", label: "Cuenta según reglas del objetivo" },
+      { value: "exclude_weekly_and_monthly", label: "Excluir de semana y mes" }
+    ];
+  }
+
+  if (type === "expense") {
+    return [
+      { value: "normal", label: "Cuenta en semana y mes" },
+      {
+        value: "exclude_weekly_expense",
+        label: "No cuenta como gasto semanal, pero reduce disponible"
+      },
+      { value: "exclude_weekly_and_monthly", label: "Excluir de semana y mes" }
+    ];
+  }
+
+  return [{ value: "normal", label: "No modificar objetivo semanal" }];
 }
 
 function PencilIcon() {

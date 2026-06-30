@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 6;
+export const BACKUP_SCHEMA_VERSION = 7;
 export const BACKUP_APP_NAME = "Finanzas personales";
 
 const ACCOUNT_TYPES = [
@@ -33,7 +33,9 @@ const REIMBURSEMENT_STATUSES = [
 const WEEKLY_BUDGET_IMPACT_SCOPES = [
   "normal",
   "exclude_weekly_expense",
-  "exclude_weekly_and_monthly"
+  "exclude_weekly_and_monthly",
+  "include_monthly_income",
+  "include_weekly_and_monthly_income"
 ] as const;
 const RECURRING_TRANSACTION_TYPES = [
   "expense",
@@ -308,10 +310,10 @@ export function validateBackup(input: unknown): BackupValidationResult {
 
     if (
       typeof input.metadata.schemaVersion === "number" &&
-      ![5, BACKUP_SCHEMA_VERSION].includes(input.metadata.schemaVersion)
+      ![5, 6, BACKUP_SCHEMA_VERSION].includes(input.metadata.schemaVersion)
     ) {
       errors.push(
-        `Versión de esquema incompatible: ${input.metadata.schemaVersion}. La aplicación admite las versiones 5 y ${BACKUP_SCHEMA_VERSION}.`
+        `Versión de esquema incompatible: ${input.metadata.schemaVersion}. La aplicación admite las versiones 5, 6 y ${BACKUP_SCHEMA_VERSION}.`
       );
     }
   }

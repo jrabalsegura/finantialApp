@@ -77,7 +77,8 @@ export const QUICK_TRANSACTION_TYPE_OPTIONS = QUICK_TRANSACTION_TYPES.map(
 export const WEEKLY_BUDGET_IMPACT_SCOPES = [
   "normal",
   "exclude_weekly_expense",
-  "exclude_weekly_and_monthly"
+  "exclude_weekly_and_monthly",
+  "include_weekly_and_monthly_income"
 ] as const satisfies ReadonlyArray<WeeklyBudgetImpactScope>;
 
 export const WEEKLY_BUDGET_IMPACT_SCOPE_LABELS: Record<
@@ -86,7 +87,8 @@ export const WEEKLY_BUDGET_IMPACT_SCOPE_LABELS: Record<
 > = {
   normal: "Cuenta en semana y mes",
   exclude_weekly_expense: "No cuenta como gasto semanal, pero reduce disponible",
-  exclude_weekly_and_monthly: "Excluir de semana y mes"
+  exclude_weekly_and_monthly: "Excluir de semana y mes",
+  include_weekly_and_monthly_income: "Cuenta en semana y mes"
 };
 
 export const WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS: Record<
@@ -95,7 +97,8 @@ export const WEEKLY_BUDGET_IMPACT_SCOPE_BADGE_LABELS: Record<
 > = {
   normal: null,
   exclude_weekly_expense: "Reduce disponible semanal",
-  exclude_weekly_and_monthly: "Fuera del objetivo semanal"
+  exclude_weekly_and_monthly: "Fuera del objetivo semanal",
+  include_weekly_and_monthly_income: "Ingreso extra semanal"
 };
 
 export const WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS =

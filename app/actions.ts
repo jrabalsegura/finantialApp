@@ -73,7 +73,8 @@ const EDITABLE_TRANSACTION_TYPES = new Set<QuickTransactionType>([
 const WEEKLY_BUDGET_IMPACT_SCOPES = new Set<WeeklyBudgetImpactScope>([
   "normal",
   "exclude_weekly_expense",
-  "exclude_weekly_and_monthly"
+  "exclude_weekly_and_monthly",
+  "include_weekly_and_monthly_income"
 ]);
 
 export async function createQuickTransaction(
@@ -158,8 +159,9 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
       ? parseRequiredString(formData.get("savingsBucketId"))
       : null;
   const description = parseOptionalString(formData.get("description"));
-  const weeklyBudgetImpactScope = parseWeeklyBudgetImpactScope(
-    formData.get("weeklyBudgetImpactScope")
+  const weeklyBudgetImpactScope = normalizeWeeklyBudgetImpactScope(
+    type,
+    parseWeeklyBudgetImpactScope(formData.get("weeklyBudgetImpactScope"))
   );
 
   await prisma.$transaction(async (tx) => {
@@ -1628,6 +1630,30 @@ function parseWeeklyBudgetImpactScope(
   }
 
   return value as WeeklyBudgetImpactScope;
+}
+
+function normalizeWeeklyBudgetImpactScope(
+  type: QuickTransactionType,
+  scope: WeeklyBudgetImpactScope
+): WeeklyBudgetImpactScope {
+  if (type === "income") {
+    return scope === "include_weekly_and_monthly_income"
+      ? scope
+      : "normal";
+  }
+
+  if (type === "expense") {
+    return scope === "exclude_weekly_expense" ||
+      scope === "exclude_weekly_and_monthly"
+      ? scope
+      : "normal";
+  }
+
+  if (type === "transfer") {
+    return scope === "exclude_weekly_and_monthly" ? scope : "normal";
+  }
+
+  return "normal";
 }
 
 function parseAmount(value: FormDataEntryValue | null): number {

@@ -1,0 +1,2 @@
+-- SQLite stores Prisma enums as TEXT, so adding enum values does not require
+-- changing existing rows or table structure.

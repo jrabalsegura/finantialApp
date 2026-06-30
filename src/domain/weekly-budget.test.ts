@@ -171,6 +171,39 @@ test("puede excluir un gasto del gasto semanal pero restarlo del disponible y de
   );
 });
 
+test("ignora ingresos puntuales por defecto en el objetivo semanal", () => {
+  const status = getWeeklyBudgetStatus({
+    recurringTransactions,
+    transactions: [income("extra", 300, "2026-06-10")],
+    setting,
+    referenceDate: new Date(2026, 5, 10, 12)
+  });
+
+  assert.equal(status.monthlyExtraIncome, 0);
+  assert.equal(status.currentWeekExtraIncome, 0);
+  assert.equal(status.remainingVariableBudget, 2500);
+  assert.equal(status.currentWeekAvailableBudget, 760.9);
+});
+
+test("puede incluir un ingreso extra en el presupuesto mensual y semanal", () => {
+  const status = getWeeklyBudgetStatus({
+    recurringTransactions,
+    transactions: [
+      {
+        ...income("extra", 300, "2026-06-10"),
+        weeklyBudgetImpactScope: "include_weekly_and_monthly_income"
+      }
+    ],
+    setting,
+    referenceDate: new Date(2026, 5, 10, 12)
+  });
+
+  assert.equal(status.monthlyExtraIncome, 300);
+  assert.equal(status.currentWeekExtraIncome, 300);
+  assert.equal(status.remainingVariableBudget, 2800);
+  assert.equal(status.currentWeekAvailableBudget, 1060.9);
+});
+
 test("la semana empieza en lunes y se limita al mes actual", () => {
   const transactions = [
     expense("sunday-before", 10, "2026-05-31"),
@@ -327,6 +360,21 @@ function expense(
     date: new Date(`${date}T12:00:00`),
     type,
     affectsPersonalExpense: type === "expense"
+  };
+}
+
+function income(
+  id: string,
+  amount: number,
+  date: string
+): VariableExpenseForBudget {
+  return {
+    id,
+    amount,
+    date: new Date(`${date}T12:00:00`),
+    type: "income",
+    affectsPersonalExpense: false,
+    affectsPersonalIncome: true
   };
 }
 

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, WeeklyBudgetImpactScope } from "@prisma/client";
 import packageJson from "../../package.json";
 import {
   BACKUP_APP_NAME,
@@ -195,11 +195,10 @@ export async function importBackup(input: unknown): Promise<void> {
 
           return {
             ...record,
-            weeklyBudgetImpactScope:
-              weeklyBudgetImpactScope ??
-              (excludeFromWeeklyBudget
-                ? "exclude_weekly_and_monthly"
-                : "normal"),
+            weeklyBudgetImpactScope: normalizeWeeklyBudgetImpactScope(
+              weeklyBudgetImpactScope,
+              excludeFromWeeklyBudget
+            ),
             monthlyCloseId: null,
             reimbursementId: null,
             date: new Date(record.date),
@@ -330,4 +329,25 @@ function serializeTimestamps<T extends { createdAt: Date; updatedAt: Date }>(
 
 function toOptionalDate(value: string | null): Date | null {
   return value === null ? null : new Date(value);
+}
+
+function normalizeWeeklyBudgetImpactScope(
+  scope: string | undefined,
+  legacyExcluded: boolean | undefined
+): WeeklyBudgetImpactScope {
+  if (
+    scope === "include_monthly_income" ||
+    scope === "include_weekly_and_monthly_income"
+  ) {
+    return "include_weekly_and_monthly_income";
+  }
+
+  if (
+    scope === "exclude_weekly_expense" ||
+    scope === "exclude_weekly_and_monthly"
+  ) {
+    return scope;
+  }
+
+  return legacyExcluded ? "exclude_weekly_and_monthly" : "normal";
 }
