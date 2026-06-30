@@ -155,9 +155,7 @@ export function MonthlyCloseForm({
       type: account.type
     }))
   );
-  const automaticLongTermSavings = roundMoney(
-    longTermTransferAllocation + longTermBucketAdjustment
-  );
+  const automaticLongTermSavings = roundMoney(longTermTransferAllocation);
   const manualCloseResult = getManualMonthlyCloseResult(
     estimatedMonthlySavings,
     automaticLongTermSavings
@@ -697,16 +695,12 @@ function DerivedLongTermBucket({
           Calculado: {currencyFormatter.format(currentAmount)} · Final:{" "}
           {currencyFormatter.format(finalAmount)}
         </p>
-        <p className="mt-1">
-          Ya asignado a Largo plazo este mes:{" "}
-          {currencyFormatter.format(Math.max(automaticSavings, 0))}
-          {transferAllocation !== 0 ? (
-            <>
-              {" "}
-              ({currencyFormatter.format(transferAllocation)} por transferencias)
-            </>
-          ) : null}
-        </p>
+        {transferAllocation !== 0 ? (
+          <p className="mt-1">
+            Ya asignado a Largo plazo por transferencias:{" "}
+            {currencyFormatter.format(Math.max(automaticSavings, 0))}
+          </p>
+        ) : null}
       </div>
       <label className="grid gap-2 text-sm font-medium text-ink">
         Largo plazo derivado

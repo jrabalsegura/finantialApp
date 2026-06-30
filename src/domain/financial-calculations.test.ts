@@ -258,7 +258,7 @@ test("calcula el ahorro automatico asignado a largo plazo", () => {
   );
 });
 
-test("descuenta el ahorro automatico de largo plazo del reparto manual", () => {
+test("descuenta aportaciones a largo plazo del reparto manual", () => {
   assert.deepEqual(getManualMonthlyCloseResult(1484.94, 360), {
     deficit: 0,
     kind: "positive",
@@ -276,6 +276,27 @@ test("descuenta el ahorro automatico de largo plazo del reparto manual", () => {
     kind: "negative",
     monthlySavings: -200,
     surplus: 0
+  });
+});
+
+test("no descuenta revalorizaciones de largo plazo del reparto manual", () => {
+  const monthlySavings = 1800.94;
+  const longTermValuationAdjustment = calculateLongTermBucketAdjustment([
+    {
+      currentBalance: 5027.35,
+      difference: 60.77,
+      includeInMonthlySavings: false,
+      includeInNetWorth: true,
+      type: "investment"
+    }
+  ]);
+
+  assert.equal(longTermValuationAdjustment, 60.77);
+  assert.deepEqual(getManualMonthlyCloseResult(monthlySavings, 0), {
+    deficit: 0,
+    kind: "positive",
+    monthlySavings,
+    surplus: monthlySavings
   });
 });
 

@@ -6,7 +6,6 @@ import type { AccountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   accountFeedsLongTermBucket,
-  calculateLongTermBucketAdjustment,
   calculateLongTermBucketBalance,
   calculateLongTermTransferAllocation,
   createMonthlyBucketSnapshots,
@@ -1021,17 +1020,9 @@ export async function closeMonth(
       const longTermTransferAllocation = calculateLongTermTransferAllocation(
         transactionsAfterAdjustments
       );
-      const longTermBucketAdjustment = calculateLongTermBucketAdjustment(
-        closedAccounts.map((account) => ({
-          difference: account.difference,
-          includeInMonthlySavings: account.includeInMonthlySavings,
-          includeInNetWorth: account.includeInNetWorth,
-          type: account.type
-        }))
-      );
       const manualCloseResult = getManualMonthlyCloseResult(
         monthlySavings,
-        longTermTransferAllocation + longTermBucketAdjustment
+        longTermTransferAllocation
       );
       const savingsAllocations = manualSavingsBuckets.map((bucket) => ({
         bucketId: bucket.id,
