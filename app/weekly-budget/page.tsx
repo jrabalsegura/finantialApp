@@ -138,13 +138,13 @@ export default async function WeeklyBudgetPage() {
               value={status.currentWeekTransferredOutOfAvailable}
             />
             <DetailRow
-              label="Fuera del gasto semanal, pero reduce disponible"
-              note="No cuenta como gasto ordinario de la semana; sí ajusta el dinero disponible."
+              label="Impacto semanal prorrateado de gastos fuera de objetivo"
+              note="No cuenta como gasto ordinario; su impacto se reparte entre los días base del mes."
               value={status.currentWeekBudgetAdjustment}
             />
             <DetailRow
-              label="Ingresos extra disponibles esta semana"
-              note="Ingresos puntuales marcados para entrar también en esta semana."
+              label="Impacto semanal prorrateado de ingresos extra"
+              note="Ingresos puntuales incluidos en el objetivo, repartidos entre los días base del mes."
               value={status.currentWeekExtraIncome}
             />
             <DetailRow
@@ -173,8 +173,8 @@ export default async function WeeklyBudgetPage() {
               Ingresos extra incluidos esta semana
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Ingresos puntuales que aumentan el presupuesto del mes y también
-              el disponible de esta semana.
+              Ingresos puntuales que aumentan el presupuesto del mes y cuyo
+              impacto semanal se prorratea.
             </p>
           </div>
           {report.extraIncomesForWeek.length > 0 ? (
@@ -217,7 +217,8 @@ export default async function WeeklyBudgetPage() {
             </h2>
             <p className="mt-1 text-xs text-muted">
               Gastos que no se miden contra el objetivo semanal ordinario, pero
-              sí dejan menos margen esta semana y en el mes.
+              sí reducen el presupuesto mensual y cuyo impacto semanal se
+              prorratea.
             </p>
           </div>
           {report.budgetAdjustingExpensesForWeek.length > 0 ? (

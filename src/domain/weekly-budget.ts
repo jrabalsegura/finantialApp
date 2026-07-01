@@ -363,8 +363,8 @@ export function getWeeklyBudgetStatus({
   const currentWeekTransferredOutOfAvailable = sumExpenses(
     weekAvailabilityTransfers
   );
-  const currentWeekBudgetAdjustment = sumExpenses(weekBudgetAdjustments);
-  const currentWeekExtraIncome = sumExpenses(weekExtraIncomes);
+  const currentWeekBudgetAdjustmentTotal = sumExpenses(weekBudgetAdjustments);
+  const currentWeekExtraIncomeTotal = sumExpenses(weekExtraIncomes);
   const remainingVariableBudget = roundMoney(
     monthlyVariableBudget -
       monthlyVariableExpense -
@@ -413,6 +413,20 @@ export function getWeeklyBudgetStatus({
   const weeklyAllocationRemainingDaysInMonth = countDaysInclusive(
     weekRangeStart,
     monthEnd
+  );
+  const weeklyAdjustmentAllocationDays =
+    setting.calculationMode === "remaining_days"
+      ? weeklyAllocationRemainingDaysInMonth
+      : daysInMonth(referenceDate);
+  const currentWeekBudgetAdjustment = roundMoney(
+    divideMoney(
+      currentWeekBudgetAdjustmentTotal,
+      weeklyAdjustmentAllocationDays
+    ) * daysInCurrentWeekWithinMonth
+  );
+  const currentWeekExtraIncome = roundMoney(
+    divideMoney(currentWeekExtraIncomeTotal, weeklyAdjustmentAllocationDays) *
+      daysInCurrentWeekWithinMonth
   );
 
   const dailyAvailableBudget =

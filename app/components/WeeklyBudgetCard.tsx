@@ -200,7 +200,7 @@ export function WeeklyBudgetCard({
                 isOverBudget ? "text-rose-800" : "text-emerald-100"
               }`}
             >
-              El disponible también descuenta{" "}
+              El disponible descuenta una prorrata de{" "}
               {currencyFormatter.format(status.currentWeekBudgetAdjustment)}{" "}
               fuera del gasto semanal ordinario.
             </p>
@@ -211,9 +211,9 @@ export function WeeklyBudgetCard({
                 isOverBudget ? "text-rose-800" : "text-emerald-100"
               }`}
             >
-              El disponible suma{" "}
-              {currencyFormatter.format(status.currentWeekExtraIncome)} de
-              ingresos extra incluidos esta semana.
+              El disponible suma una prorrata de{" "}
+              {currencyFormatter.format(status.currentWeekExtraIncome)} por
+              ingresos extra incluidos.
             </p>
           ) : null}
         </>

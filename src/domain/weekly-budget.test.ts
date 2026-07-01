@@ -158,9 +158,9 @@ test("puede excluir un gasto del gasto semanal pero restarlo del disponible y de
 
   assert.equal(status.monthlyVariableExpense, 200);
   assert.equal(status.currentWeekVariableExpense, 80);
-  assert.equal(status.currentWeekBudgetAdjustment, 120);
-  assert.equal(status.currentWeekAvailableBudget, 640.9);
-  assert.equal(status.currentWeekDifference, 560.9);
+  assert.equal(status.currentWeekBudgetAdjustment, 36.54);
+  assert.equal(status.currentWeekAvailableBudget, 724.36);
+  assert.equal(status.currentWeekDifference, 644.36);
   assert.deepEqual(
     status.variableExpensesForWeek.map((transaction) => transaction.id),
     ["regular"]
@@ -199,9 +199,9 @@ test("puede incluir un ingreso extra en el presupuesto mensual y semanal", () =>
   });
 
   assert.equal(status.monthlyExtraIncome, 300);
-  assert.equal(status.currentWeekExtraIncome, 300);
+  assert.equal(status.currentWeekExtraIncome, 91.28);
   assert.equal(status.remainingVariableBudget, 2800);
-  assert.equal(status.currentWeekAvailableBudget, 1060.9);
+  assert.equal(status.currentWeekAvailableBudget, 852.18);
 });
 
 test("la semana empieza en lunes y se limita al mes actual", () => {
