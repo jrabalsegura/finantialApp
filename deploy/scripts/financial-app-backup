@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+umask 077
+
+backup_root=${FINANCIAL_APP_BACKUP_ROOT:-/var/backups/financial-app}
+retention_days=${FINANCIAL_APP_BACKUP_RETENTION_DAYS:-14}
+source_root=${FINANCIAL_APP_BACKUP_SOURCE_ROOT:-/}
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+app_was_active=false
+
+install -d -m 0700 "$backup_root"
+temporary_archive=$(mktemp "$backup_root/.financial-app-$timestamp.XXXXXX")
+final_archive="$backup_root/financial-app-$timestamp.tar.gz"
+
+cleanup() {
+  rm -f "$temporary_archive"
+  if [ "$app_was_active" = true ]; then
+    systemctl start financial-app.service
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+if [ "$source_root" = "/" ] \
+  && systemctl is-active --quiet financial-app.service; then
+  systemctl stop financial-app.service
+  app_was_active=true
+fi
+
+tar \
+  --create \
+  --gzip \
+  --file "$temporary_archive" \
+  --directory "$source_root" \
+  etc/financial-app \
+  etc/containers/systemd/financial-app.container \
+  etc/nginx/sites-available/financial-app \
+  etc/systemd/system/financial-app-backup.service \
+  etc/systemd/system/financial-app-backup.timer \
+  usr/local/sbin/financial-app-backup \
+  var/lib/financial-app/data
+
+mv "$temporary_archive" "$final_archive"
+
+find "$backup_root" \
+  -type f \
+  -name 'financial-app-*.tar.gz' \
+  -mtime "+$retention_days" \
+  -delete
+
+printf '%s\n' "$final_archive"

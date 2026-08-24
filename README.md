@@ -104,7 +104,7 @@ La app incluye autenticación básica para uso privado:
 
    ```bash
    DATABASE_URL="file:./dev.db"
-   AUTH_SECRET="change-me-before-publishing"
+   AUTH_SECRET="replace-with-at-least-32-random-bytes"
    ```
 
    Cambia `AUTH_SECRET` por un valor largo y aleatorio antes de publicar la app
@@ -151,6 +151,18 @@ La app incluye autenticación básica para uso privado:
 - `npm run db:migrate`: aplica migraciones en desarrollo.
 - `npm run db:seed`: ejecuta el seed inicial.
 - `npm run db:studio`: abre Prisma Studio.
+
+## Contenedores y producción
+
+La app incluye una imagen OCI, una prueba local aislada y un despliegue de
+producción con Podman, Quadlet, nginx y backups de SQLite:
+
+- [`docs/DEPLOY.md`](docs/DEPLOY.md): validación local y transición completa.
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md): operación, backup y restauración.
+
+La prueba local nunca monta `prisma/dev.db` directamente. `make
+container-import-db` genera una copia bajo `.container-data/` y el contenedor
+trabaja exclusivamente sobre ella.
 
 ## Estructura interna
 

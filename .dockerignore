@@ -1,0 +1,14 @@
+.container-data
+.git
+.next
+.env
+.env.*
+!.env.example
+coverage
+node_modules
+npm-debug.log*
+prisma/*.db
+prisma/*.db-*
+*.sqlite
+*.sqlite-*
+tsconfig.tsbuildinfo
