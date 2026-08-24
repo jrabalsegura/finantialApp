@@ -107,6 +107,43 @@ export const WEEKLY_BUDGET_IMPACT_SCOPE_OPTIONS =
     label: WEEKLY_BUDGET_IMPACT_SCOPE_LABELS[value]
   }));
 
+export function getWeeklyBudgetImpactOptions(
+  type: TransactionType
+): Array<{
+  value: WeeklyBudgetImpactScope;
+  label: string;
+}> {
+  if (type === "income") {
+    return [
+      { value: "normal", label: "No contar en objetivo semanal" },
+      {
+        value: "include_weekly_and_monthly_income",
+        label: "Cuenta en semana y mes"
+      }
+    ];
+  }
+
+  if (type === "transfer") {
+    return [
+      { value: "normal", label: "Cuenta según reglas del objetivo" },
+      { value: "exclude_weekly_and_monthly", label: "Excluir de semana y mes" }
+    ];
+  }
+
+  if (type === "expense") {
+    return [
+      { value: "normal", label: "Cuenta en semana y mes" },
+      {
+        value: "exclude_weekly_expense",
+        label: "No cuenta como gasto semanal, pero reduce disponible"
+      },
+      { value: "exclude_weekly_and_monthly", label: "Excluir de semana y mes" }
+    ];
+  }
+
+  return [{ value: "normal", label: "No modificar objetivo semanal" }];
+}
+
 export const RECURRING_TRANSACTION_TYPES = [
   "expense",
   "income",

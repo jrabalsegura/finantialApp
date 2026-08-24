@@ -11,7 +11,10 @@ import type {
   TransactionFormState,
   createQuickTransaction
 } from "../actions";
-import { QUICK_TRANSACTION_TYPE_LABELS } from "@/domain/domain-options";
+import {
+  getWeeklyBudgetImpactOptions,
+  QUICK_TRANSACTION_TYPE_LABELS
+} from "@/domain/domain-options";
 import { formatCurrencyEUR } from "@/lib/formatters";
 import { formatPlainAmount } from "@/domain/money";
 import type { QuickTransactionDraft } from "@/domain/quick-transaction-templates";
@@ -419,6 +422,42 @@ export function QuickTransactionForm({
             value={description}
           />
         </label>
+
+        {type === "income" ? (
+          <label className="flex items-start gap-3 rounded-lg border border-line bg-surface px-3 py-3 text-sm text-ink">
+            <input
+              className="mt-0.5 h-4 w-4 accent-emerald-700"
+              name="weeklyBudgetImpactScope"
+              type="checkbox"
+              value="include_weekly_and_monthly_income"
+            />
+            <span>
+              <span className="block font-semibold">
+                Contar en el objetivo semanal
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-muted">
+                Este ingreso se tendrá en cuenta en la semana y en el mes.
+              </span>
+            </span>
+          </label>
+        ) : null}
+
+        {type === "expense" ? (
+          <label className="field-label">
+            Impacto en objetivo semanal
+            <select
+              className="field-input"
+              defaultValue="normal"
+              name="weeklyBudgetImpactScope"
+            >
+              {getWeeklyBudgetImpactOptions(type).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <button
           className="primary-button min-h-14"

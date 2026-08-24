@@ -109,6 +109,10 @@ export async function createQuickTransaction(
       type === "reimbursement_income"
         ? parseRequiredString(formData.get("reimbursementId"))
         : null;
+    const weeklyBudgetImpactScope = normalizeWeeklyBudgetImpactScope(
+      type,
+      parseWeeklyBudgetImpactScope(formData.get("weeklyBudgetImpactScope"))
+    );
 
     await createTransactionFromDraft({
       type,
@@ -120,7 +124,8 @@ export async function createQuickTransaction(
       description,
       date,
       personName,
-      reimbursementId
+      reimbursementId,
+      weeklyBudgetImpactScope
     });
 
     revalidateTransactionViews();
