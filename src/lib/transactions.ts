@@ -1,4 +1,8 @@
-import type { Prisma, QuickTransactionTemplateType } from "@prisma/client";
+import type {
+  Prisma,
+  QuickTransactionTemplateType,
+  WeeklyBudgetImpactScope
+} from "@prisma/client";
 import { getQuickTransactionRules } from "@/domain/transaction-rules";
 import { toMoneyNumber } from "@/domain/financial-calculations";
 import { prisma } from "./prisma";
@@ -14,6 +18,7 @@ export type CreateTransactionInput = {
   description: string | null;
   personName?: string | null;
   reimbursementId?: string | null;
+  weeklyBudgetImpactScope: WeeklyBudgetImpactScope;
 };
 
 export async function createTransactionFromDraft(
@@ -146,7 +151,8 @@ async function createBaseTransaction(
       affectsPersonalExpense: rules.impact.affectsPersonalExpense,
       affectsPersonalIncome: rules.impact.affectsPersonalIncome,
       affectsMonthlySavings: rules.impact.affectsMonthlySavings,
-      affectsNetWorth: rules.impact.affectsNetWorth
+      affectsNetWorth: rules.impact.affectsNetWorth,
+      weeklyBudgetImpactScope: input.weeklyBudgetImpactScope
     }
   });
 }
