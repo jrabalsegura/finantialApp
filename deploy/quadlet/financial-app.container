@@ -9,6 +9,7 @@ Image=localhost/financial-app:current
 Pull=never
 PublishPort=127.0.0.1:3088:3000
 EnvironmentFile=/etc/financial-app/app.env
+Environment=TZ=Europe/Madrid
 Volume=/var/lib/financial-app/data:/data:rw,z
 User=10001
 Group=10001

@@ -282,7 +282,9 @@ sudo systemctl daemon-reload
 ```
 
 El Quadlet publica solamente `127.0.0.1:3088`; no abras ese puerto en el
-firewall.
+firewall. También fija `TZ=Europe/Madrid`: la aplicación calcula las fechas
+recurrentes en la zona horaria de negocio y debe conservarla al migrar desde el
+proceso anterior.
 
 ## 8. Crear un ensayo paralelo con una copia de SQLite
 

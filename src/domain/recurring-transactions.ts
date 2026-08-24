@@ -54,6 +54,23 @@ export function getScheduledDate(
   return new Date(year, month - 1, Math.min(dayOfMonth, lastDayOfMonth), 12);
 }
 
+export function getCalendarDayRange(date: Date): {
+  start: Date;
+  end: Date;
+} {
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Fecha no válida.");
+  }
+
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return { start, end };
+}
+
 export function shouldGenerateRecurringTransaction(
   template: RecurringTemplateForSchedule,
   year: number,

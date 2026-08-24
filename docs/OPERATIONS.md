@@ -133,6 +133,9 @@ Errores habituales:
 - directorio o base sin dueño `10001:10001`;
 - una migración Prisma fallida;
 - el puerto `127.0.0.1:3088` ocupado.
+- ocurrencias fijas repetidas tras una restauración: confirma que el contenedor
+  resuelve `TZ=Europe/Madrid` y que el Quadlet instalado contiene
+  `Environment=TZ=Europe/Madrid` antes de limpiar filas;
 - `crun: write: No space left on device` con espacio libre en el host: el
   Quadlet instalado no contiene `notmpcopyup` para `/app/.next/cache` y Podman
   intenta copiar el cache de compilacion dentro del tmpfs de 64 MiB.

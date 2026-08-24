@@ -33,7 +33,8 @@ ARG APP_GID=10001
 
 ENV HOME=/tmp \
     NEXT_TELEMETRY_DISABLED=1 \
-    NODE_ENV=production
+    NODE_ENV=production \
+    TZ=Europe/Madrid
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates openssl \
