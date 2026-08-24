@@ -15,7 +15,9 @@ Group=10001
 RunInit=true
 ReadOnly=true
 ReadOnlyTmpfs=true
-Tmpfs=/app/.next/cache:rw,size=64m,mode=1777
+# Podman activa tmpcopyup por defecto. El cache de build de Next.js puede
+# superar este limite; el cache de runtime debe empezar vacio.
+Tmpfs=/app/.next/cache:rw,size=64m,mode=1777,notmpcopyup
 NoNewPrivileges=true
 DropCapability=all
 HealthCmd=node /usr/local/bin/financial-app-healthcheck.mjs

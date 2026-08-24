@@ -318,6 +318,23 @@ deploy/scripts/smoke-test.sh http://127.0.0.1:3088
 sudo podman healthcheck run financial-app
 ```
 
+Si `crun` responde `write: No space left on device` aunque `df` muestre
+espacio libre, comprueba que el Quadlet instalado contiene
+`notmpcopyup` en el `Tmpfs` de `/app/.next/cache`. Podman intenta copiar por
+defecto el cache de compilacion de Next.js al tmpfs de 64 MiB antes de arrancar
+el contenedor. Reinstala el Quadlet versionado y vuelve a intentarlo; no hace
+falta reemplazar la copia SQLite ni detener `finantialApp.service`:
+
+```bash
+sudo systemctl stop financial-app.service
+sudo install -m 0644 \
+  deploy/quadlet/financial-app.container \
+  /etc/containers/systemd/financial-app.container
+sudo systemctl daemon-reload
+sudo systemctl reset-failed financial-app.service
+sudo systemctl start financial-app.service
+```
+
 En este punto ambas apps funcionan con bases independientes. El ensayo puede
 usarse para comprobar login, pantallas y operaciones, pero sus escrituras no se
 replican en la app antigua. En la sincronización final se descartará esta copia
