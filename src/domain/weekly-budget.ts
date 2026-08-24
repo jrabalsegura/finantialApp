@@ -33,6 +33,10 @@ export type RecurringTransactionForBudget = {
   startDate: Date | string;
   endDate?: Date | string | null;
   isActive: boolean;
+  occurrences?: Array<{
+    scheduledDate: Date | string;
+    status: "pending" | "confirmed" | "skipped";
+  }>;
 };
 
 export type VariableExpenseForBudget = {
@@ -512,7 +516,7 @@ function sumRecurringTransactions(
         (total, transaction) =>
           total +
           toMoneyNumber(transaction.amount) *
-            getOccurrenceCountForMonth(transaction, referenceDate),
+            getIncludedRecurringOccurrenceCount(transaction, referenceDate),
         0
       )
   );
@@ -522,18 +526,57 @@ function appliesToMonth(
   transaction: RecurringTransactionForBudget,
   referenceDate: Date
 ): boolean {
-  return getOccurrenceCountForMonth(transaction, referenceDate) > 0;
+  return getIncludedRecurringOccurrenceCount(transaction, referenceDate) > 0;
 }
 
-function getOccurrenceCountForMonth(
-  transaction: RecurringTransactionForBudget,
+export function getIncludedRecurringOccurrenceCount(
+  transaction: Pick<
+    RecurringTransactionForBudget,
+    | "dayOfMonth"
+    | "dayOfWeek"
+    | "frequency"
+    | "startDate"
+    | "endDate"
+    | "occurrences"
+  >,
   referenceDate: Date
 ): number {
-  return getScheduledDatesForMonth(
+  const scheduledDates = getScheduledDatesForMonth(
     transaction,
     referenceDate.getFullYear(),
     referenceDate.getMonth() + 1
+  );
+
+  if (!transaction.occurrences) {
+    return scheduledDates.length;
+  }
+
+  const occurrencesByScheduledDate = new Map(
+    transaction.occurrences.map((occurrence) => [
+      toCalendarDateKey(occurrence.scheduledDate),
+      occurrence.status
+    ])
+  );
+  const scheduledDateKeys = new Set(
+    scheduledDates.map((date) => toCalendarDateKey(date))
+  );
+  const includedScheduledOccurrences = scheduledDates.filter(
+    (date) =>
+      occurrencesByScheduledDate.get(toCalendarDateKey(date)) !== "skipped"
   ).length;
+  const confirmedOutsideCurrentSchedule = transaction.occurrences.filter(
+    (occurrence) =>
+      occurrence.status === "confirmed" &&
+      !scheduledDateKeys.has(toCalendarDateKey(occurrence.scheduledDate))
+  ).length;
+
+  return includedScheduledOccurrences + confirmedOutsideCurrentSchedule;
+}
+
+function toCalendarDateKey(value: Date | string): string {
+  const date = new Date(value);
+
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
 function isVariableExpense(

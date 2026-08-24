@@ -8,14 +8,14 @@ import { logoutUser } from "../login/actions";
 const primaryItems = [
   { href: "/", label: "Dashboard" },
   { href: "/accounts", label: "Cuentas" },
-  { href: "/monthly-close", label: "Cierre" }
+  { href: "/monthly-close", label: "Cierre" },
+  { href: "/recurring", label: "Fijos" }
 ];
 
 const secondaryItems = [
   { href: "/savings", label: "Partidas" },
   { href: "/categories", label: "Categorías" },
   { href: "/reimbursements", label: "Pendientes" },
-  { href: "/recurring", label: "Fijos" },
   { href: "/quick-templates", label: "Accesos rápidos" },
   { href: "/history", label: "Histórico" },
   { href: "/settings/security", label: "Seguridad" },

@@ -52,6 +52,137 @@ test("convierte recurrentes semanales en el total exacto de ocurrencias del mes"
   assert.equal(getFixedMonthlyExpenses(weeklyRecurring, referenceDate), 125);
 });
 
+test("recalcula esa semana y las siguientes al omitir un gasto fijo mensual", () => {
+  const income = recurring("income", "Nómina", "income", 2500, 1);
+  const expense = recurring("expense", "Seguro", "expense", 500, 10);
+  const skippedExpense: RecurringTransactionForBudget = {
+    ...expense,
+    occurrences: [
+      {
+        scheduledDate: new Date(2026, 5, 10, 12),
+        status: "skipped"
+      }
+    ]
+  };
+  const currentWeekReference = new Date(2026, 5, 10, 12);
+  const followingWeekReference = new Date(2026, 5, 15, 12);
+
+  const currentWeekBeforeSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, expense],
+    transactions: [],
+    setting,
+    referenceDate: currentWeekReference
+  });
+  const currentWeekAfterSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, skippedExpense],
+    transactions: [],
+    setting,
+    referenceDate: currentWeekReference
+  });
+  const followingWeekBeforeSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, expense],
+    transactions: [],
+    setting,
+    referenceDate: followingWeekReference
+  });
+  const followingWeekAfterSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, skippedExpense],
+    transactions: [],
+    setting,
+    referenceDate: followingWeekReference
+  });
+
+  assert.equal(currentWeekAfterSkip.fixedMonthlyExpenses, 0);
+  assert.equal(currentWeekAfterSkip.monthlyVariableBudget, 2200);
+  assert.ok(
+    currentWeekAfterSkip.currentWeekAvailableBudget >
+      currentWeekBeforeSkip.currentWeekAvailableBudget
+  );
+  assert.ok(
+    followingWeekAfterSkip.currentWeekAvailableBudget >
+      followingWeekBeforeSkip.currentWeekAvailableBudget
+  );
+});
+
+test("reparte un gasto fijo semanal omitido entre esa semana y las siguientes", () => {
+  const income = recurring("income", "Nómina", "income", 2500, 1);
+  const weeklyExpense = weeklyRecurringItem(
+    "weekly-expense",
+    "Transporte",
+    "expense",
+    100,
+    1
+  );
+  const skippedWeeklyExpense: RecurringTransactionForBudget = {
+    ...weeklyExpense,
+    occurrences: [
+      {
+        scheduledDate: new Date(2026, 5, 8, 12),
+        status: "skipped"
+      }
+    ]
+  };
+  const currentWeekReference = new Date(2026, 5, 10, 12);
+  const followingWeekReference = new Date(2026, 5, 15, 12);
+
+  const currentWeekBeforeSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, weeklyExpense],
+    transactions: [],
+    setting,
+    referenceDate: currentWeekReference
+  });
+  const currentWeekAfterSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, skippedWeeklyExpense],
+    transactions: [],
+    setting,
+    referenceDate: currentWeekReference
+  });
+  const followingWeekBeforeSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, weeklyExpense],
+    transactions: [],
+    setting,
+    referenceDate: followingWeekReference
+  });
+  const followingWeekAfterSkip = getWeeklyBudgetStatus({
+    recurringTransactions: [income, skippedWeeklyExpense],
+    transactions: [],
+    setting,
+    referenceDate: followingWeekReference
+  });
+
+  assert.equal(currentWeekAfterSkip.fixedMonthlyExpenses, 400);
+  assert.equal(currentWeekAfterSkip.monthlyVariableBudget, 1800);
+  assert.ok(
+    currentWeekAfterSkip.currentWeekAvailableBudget >
+      currentWeekBeforeSkip.currentWeekAvailableBudget
+  );
+  assert.ok(
+    followingWeekAfterSkip.currentWeekAvailableBudget >
+      followingWeekBeforeSkip.currentWeekAvailableBudget
+  );
+});
+
+test("mantiene un fijo confirmado aunque su fecha prevista anterior figure omitida", () => {
+  const shiftedExpense: RecurringTransactionForBudget = {
+    ...recurring("expense", "Seguro", "expense", 500, 20),
+    occurrences: [
+      {
+        scheduledDate: new Date(2026, 5, 19, 12),
+        status: "confirmed"
+      },
+      {
+        scheduledDate: new Date(2026, 5, 20, 12),
+        status: "skipped"
+      }
+    ]
+  };
+
+  assert.equal(
+    getFixedMonthlyExpenses([shiftedExpense], new Date(2026, 5, 10, 12)),
+    500
+  );
+});
+
 test("excluye del gasto variable fijos confirmados y tipos técnicos", () => {
   const transactions: VariableExpenseForBudget[] = [
     expense("variable", 100, "2026-06-03"),

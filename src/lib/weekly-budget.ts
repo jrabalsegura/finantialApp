@@ -1,5 +1,5 @@
-import { getScheduledDatesForMonth } from "@/domain/recurring-transactions";
 import {
+  getIncludedRecurringOccurrenceCount,
   getWeeklyBudgetStatus,
   type WeeklyBudgetCalculationMode
 } from "@/domain/weekly-budget";
@@ -53,6 +53,13 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
         },
         category: {
           select: { name: true }
+        },
+        occurrences: {
+          where: { year, month },
+          select: {
+            scheduledDate: true,
+            status: true
+          }
         }
       }
     }),
@@ -118,7 +125,10 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
   });
   const activeThisMonth = recurringTransactions.filter(
     (transaction) =>
-      getScheduledDatesForMonth(transaction, year, month).length > 0
+      getIncludedRecurringOccurrenceCount(
+        transaction,
+        new Date(year, month - 1, 1, 12)
+      ) > 0
   );
   const includedWeekIds = new Set(
     status.variableExpensesForWeek.map((transaction) => transaction.id)
@@ -218,15 +228,18 @@ function toFixedItem(
     endDate: Date | null;
     account: { name: string };
     category: { name: string } | null;
+    occurrences: Array<{
+      scheduledDate: Date;
+      status: "pending" | "confirmed" | "skipped";
+    }>;
   },
   year: number,
   month: number
 ) {
-  const occurrenceCount = getScheduledDatesForMonth(
+  const occurrenceCount = getIncludedRecurringOccurrenceCount(
     transaction,
-    year,
-    month
-  ).length;
+    new Date(year, month - 1, 1, 12)
+  );
   const amountPerOccurrence = toMoneyNumber(transaction.amount);
 
   return {
