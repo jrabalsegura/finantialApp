@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import {
+  getCalendarDayRange,
   getScheduledDatesForMonth,
-  getRecurringTransactionRules,
+  getRecurringTransactionRules
 } from "@/domain/recurring-transactions";
 import { toMoneyNumber } from "@/domain/financial-calculations";
 
@@ -57,12 +58,14 @@ export async function generateRecurringOccurrencesForMonth(
 
       try {
         await prisma.$transaction(async (tx) => {
+          const scheduledDayRange = getCalendarDayRange(scheduledDate);
           const existing =
-            await tx.recurringTransactionOccurrence.findUnique({
+            await tx.recurringTransactionOccurrence.findFirst({
               where: {
-                recurringTransactionId_scheduledDate: {
-                  recurringTransactionId: template.id,
-                  scheduledDate
+                recurringTransactionId: template.id,
+                scheduledDate: {
+                  gte: scheduledDayRange.start,
+                  lt: scheduledDayRange.end
                 }
               },
               select: { id: true }
@@ -116,6 +119,8 @@ async function reconcileShiftedMonthlyConfirmation(
   month: number,
   expectedScheduledDate: Date
 ): Promise<boolean> {
+  const expectedDayRange = getCalendarDayRange(expectedScheduledDate);
+
   return prisma.$transaction(async (tx) => {
     const shiftedConfirmedOccurrence =
       await tx.recurringTransactionOccurrence.findFirst({
@@ -126,7 +131,10 @@ async function reconcileShiftedMonthlyConfirmation(
           status: "confirmed",
           generatedTransactionId: { not: null },
           NOT: {
-            scheduledDate: expectedScheduledDate
+            scheduledDate: {
+              gte: expectedDayRange.start,
+              lt: expectedDayRange.end
+            }
           }
         },
         select: { id: true }
@@ -142,7 +150,10 @@ async function reconcileShiftedMonthlyConfirmation(
         year,
         month,
         status: "pending",
-        scheduledDate: expectedScheduledDate
+        scheduledDate: {
+          gte: expectedDayRange.start,
+          lt: expectedDayRange.end
+        }
       },
       data: {
         status: "skipped"

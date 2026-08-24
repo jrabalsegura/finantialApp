@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getCalendarDayRange,
   getNextScheduledDate,
   getRecurringTransactionRules,
   getScheduledDate,
@@ -12,6 +13,17 @@ import {
 test("ajusta el día previsto al último día de meses cortos", () => {
   assert.equal(getScheduledDate(2026, 2, 31).getDate(), 28);
   assert.equal(getScheduledDate(2028, 2, 31).getDate(), 29);
+});
+
+test("considera la misma ocurrencia aunque su hora interna difiera", () => {
+  const scheduledDate = getScheduledDate(2026, 8, 29);
+  const restoredDate = new Date(scheduledDate.getTime() - 2 * 60 * 60 * 1000);
+  const range = getCalendarDayRange(scheduledDate);
+
+  assert.ok(restoredDate >= range.start);
+  assert.ok(restoredDate < range.end);
+  assert.equal(range.start.getHours(), 0);
+  assert.equal(range.end.getHours(), 0);
 });
 
 test("solo genera una plantilla cuando su fecha mensual cae en el rango activo", () => {
