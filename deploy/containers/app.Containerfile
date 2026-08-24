@@ -22,6 +22,7 @@ COPY postcss.config.js tailwind.config.ts tsconfig.json ./
 RUN DATABASE_URL=file:/tmp/build.db \
       AUTH_SECRET=container-build-placeholder-never-used-at-runtime \
       npm run build \
+    && rm -rf .next/cache \
     && npm prune --omit=dev \
     && npm cache clean --force
 
@@ -55,6 +56,8 @@ COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/prisma ./prisma
 COPY --chown=${APP_UID}:${APP_GID} next.config.mjs ./next.config.mjs
 COPY --chmod=0555 deploy/containers/entrypoint.sh /usr/local/bin/financial-app-entrypoint
 COPY --chmod=0555 deploy/containers/healthcheck.mjs /usr/local/bin/financial-app-healthcheck.mjs
+
+RUN install -d -o "${APP_UID}" -g "${APP_GID}" /app/.next/cache
 
 USER ${APP_UID}:${APP_GID}
 EXPOSE 3000
