@@ -1,0 +1,10 @@
+[Unit]
+Description=Backup diario de Finanzas personales
+
+[Timer]
+OnCalendar=*-*-* 03:50:00
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

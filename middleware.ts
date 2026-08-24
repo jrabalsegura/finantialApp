@@ -8,7 +8,12 @@ import {
   verifySessionToken
 } from "@/lib/session";
 
-const PUBLIC_PATH_PREFIXES = ["/_next", "/favicon.ico", "/login"];
+const PUBLIC_PATH_PREFIXES = [
+  "/_next",
+  "/api/health",
+  "/favicon.ico",
+  "/login"
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

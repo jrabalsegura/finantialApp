@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup de Finanzas personales
+ConditionPathIsDirectory=/var/lib/financial-app/data
+ConditionPathExists=/etc/financial-app/app.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/financial-app-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

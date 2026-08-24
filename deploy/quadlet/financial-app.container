@@ -1,0 +1,38 @@
+[Unit]
+Description=Finanzas personales - aplicación Next.js
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=financial-app
+Image=localhost/financial-app:current
+Pull=never
+PublishPort=127.0.0.1:3088:3000
+EnvironmentFile=/etc/financial-app/app.env
+Volume=/var/lib/financial-app/data:/data:rw,z
+User=10001
+Group=10001
+RunInit=true
+ReadOnly=true
+ReadOnlyTmpfs=true
+Tmpfs=/app/.next/cache:rw,size=64m,mode=1777
+NoNewPrivileges=true
+DropCapability=all
+HealthCmd=node /usr/local/bin/financial-app-healthcheck.mjs
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=30s
+HealthOnFailure=kill
+LogDriver=k8s-file
+# Compatibilidad con los generadores Quadlet 4.9/5.0 de Ubuntu.
+PodmanArgs=--log-opt=max-size=20mb --stop-signal=SIGTERM --stop-timeout=30
+PidsLimit=256
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
