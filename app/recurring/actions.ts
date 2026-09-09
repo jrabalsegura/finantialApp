@@ -1,4 +1,5 @@
 "use server";
+import { requireCurrentUser } from "@/lib/auth";
 
 import {
   RecurringAutoCreateMode,
@@ -16,25 +17,21 @@ import { parseMoneyInput } from "@/domain/money";
 import {
   confirmAllRecurringOccurrences,
   confirmRecurringOccurrence,
-  skipRecurringOccurrence
+  skipRecurringOccurrence,
+  reconcilePendingOccurrences
 } from "@/lib/recurring-transactions";
 import { prisma } from "@/lib/prisma";
 
 const VALID_TYPES = new Set<RecurringTransactionType>(
   RECURRING_TRANSACTION_TYPES
 );
-const VALID_MODES = new Set<RecurringAutoCreateMode>([
-  "pending",
-  "automatic"
-]);
-const VALID_FREQUENCIES = new Set<RecurringFrequency>([
-  "monthly",
-  "weekly"
-]);
+const VALID_MODES = new Set<RecurringAutoCreateMode>(["pending", "automatic"]);
+const VALID_FREQUENCIES = new Set<RecurringFrequency>(["monthly", "weekly"]);
 
 export async function createRecurringTransaction(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const input = parseRecurringTransactionForm(formData);
 
   await prisma.$transaction(async (tx) => {
@@ -48,15 +45,29 @@ export async function createRecurringTransaction(
 export async function updateRecurringTransaction(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const input = parseRecurringTransactionForm(formData);
 
   await prisma.$transaction(async (tx) => {
+    const previous = await tx.recurringTransaction.findUniqueOrThrow({
+      where: { id }
+    });
+    if (
+      previous.type !== input.type &&
+      (await tx.recurringTransactionOccurrence.count({
+        where: { recurringTransactionId: id, status: { not: "pending" } }
+      }))
+    )
+      throw new Error(
+        "La plantilla tiene historial. Crea otra para cambiar el tipo de movimiento."
+      );
     await validateRecurringRelations(tx, input);
     await tx.recurringTransaction.update({
       where: { id },
       data: input
     });
+    await reconcilePendingOccurrences(tx, id);
   });
 
   revalidateRecurringViews();
@@ -65,12 +76,13 @@ export async function updateRecurringTransaction(
 export async function toggleRecurringTransaction(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const isActive = formData.get("isActive") === "true";
 
-  await prisma.recurringTransaction.update({
-    where: { id },
-    data: { isActive }
+  await prisma.$transaction(async (tx) => {
+    await tx.recurringTransaction.update({ where: { id }, data: { isActive } });
+    await reconcilePendingOccurrences(tx, id);
   });
 
   revalidateRecurringViews();
@@ -79,13 +91,24 @@ export async function toggleRecurringTransaction(
 export async function deleteRecurringTransaction(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
 
-  await prisma.recurringTransaction.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    const count = await tx.recurringTransactionOccurrence.count({
+      where: { recurringTransactionId: id, status: { not: "pending" } }
+    });
+    if (count > 0)
+      throw new Error(
+        "Esta plantilla tiene historial. Desactívala para conservar sus movimientos e informes."
+      );
+    await tx.recurringTransaction.delete({ where: { id } });
+  });
   revalidateRecurringViews();
 }
 
 export async function confirmOccurrence(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const occurrenceId = parseRequiredString(formData.get("occurrenceId"));
 
   await confirmRecurringOccurrence(occurrenceId);
@@ -95,6 +118,7 @@ export async function confirmOccurrence(formData: FormData): Promise<void> {
 export async function editAndConfirmOccurrence(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const occurrenceId = parseRequiredString(formData.get("occurrenceId"));
   const amount = parseAmount(formData.get("amount"));
   const date = parseDate(formData.get("date"));
@@ -104,6 +128,7 @@ export async function editAndConfirmOccurrence(
 }
 
 export async function skipOccurrence(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const occurrenceId = parseRequiredString(formData.get("occurrenceId"));
 
   await skipRecurringOccurrence(occurrenceId);
@@ -111,6 +136,7 @@ export async function skipOccurrence(formData: FormData): Promise<void> {
 }
 
 export async function confirmAllOccurrences(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const year = parseInteger(formData.get("year"), "Año no válido.");
   const month = parseInteger(formData.get("month"), "Mes no válido.");
 
@@ -147,10 +173,7 @@ function parseRecurringTransactionForm(formData: FormData) {
       : 1;
   const dayOfWeek =
     frequency === "weekly"
-      ? parseInteger(
-          formData.get("dayOfWeek"),
-          "Día de la semana no válido."
-        )
+      ? parseInteger(formData.get("dayOfWeek"), "Día de la semana no válido.")
       : 1;
   const startDate = parseDate(formData.get("startDate"));
   const endDate = parseOptionalDate(formData.get("endDate"));
@@ -163,11 +186,7 @@ function parseRecurringTransactionForm(formData: FormData) {
   if (dayOfWeek < 1 || dayOfWeek > 7) {
     throw new Error("El día de la semana no es válido.");
   }
-  if (
-    frequency === "weekly" &&
-    type !== "expense" &&
-    type !== "income"
-  ) {
+  if (frequency === "weekly" && type !== "expense" && type !== "income") {
     throw new Error(
       "La frecuencia semanal solo está disponible para gastos e ingresos."
     );
@@ -283,9 +302,7 @@ function parseMode(value: FormDataEntryValue | null): RecurringAutoCreateMode {
   return value as RecurringAutoCreateMode;
 }
 
-function parseFrequency(
-  value: FormDataEntryValue | null
-): RecurringFrequency {
+function parseFrequency(value: FormDataEntryValue | null): RecurringFrequency {
   if (
     typeof value !== "string" ||
     !VALID_FREQUENCIES.has(value as RecurringFrequency)

@@ -1,3 +1,7 @@
+import { getChangesAfter } from "@/lib/historical-balances";
+import { normalizeMoney } from "@/domain/money";
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { closeMonth, undoLatestMonthlyClose } from "../actions";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
@@ -51,6 +55,7 @@ export default async function MonthlyClosePage({
 }: {
   searchParams: Promise<{ period?: string }>;
 }) {
+  await requireCurrentUser();
   const query = await searchParams;
   const selectedPeriod = parsePeriod(query.period);
   const monthRange = getMonthDateRange(selectedPeriod.year, selectedPeriod.month);
@@ -200,6 +205,7 @@ export default async function MonthlyClosePage({
     })
   ]);
 
+  const changesAfter = await getChangesAfter(prisma, monthRange.end);
   const totalIncome = calculateRealMonthlyIncome(
     monthlyTransactions,
     selectedPeriod.year,
@@ -270,7 +276,7 @@ export default async function MonthlyClosePage({
             </p>
             <Link
               className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-amber-400 bg-white px-4 text-sm font-bold"
-              href="/recurring"
+              href={`/recurring?period=${formatPeriodValue(selectedPeriod)}`}
             >
               Revisar {pendingRecurringCount} pendientes
             </Link>
@@ -287,7 +293,7 @@ export default async function MonthlyClosePage({
         ) : (
           <MonthlyCloseForm
             accounts={accounts.map((account) => ({
-              calculatedBalance: toMoneyNumber(account.currentBalance),
+              calculatedBalance: normalizeMoney(toMoneyNumber(account.currentBalance) - (changesAfter.accounts.get(account.id) ?? 0)),
               id: account.id,
               includeInAvailableMoney: account.includeInAvailableMoney,
               includeInNetWorth: account.includeInNetWorth,
@@ -298,7 +304,7 @@ export default async function MonthlyClosePage({
             action={closeMonth}
             baseMonthlySavings={monthlySavings}
             buckets={savingsBuckets.map((bucket) => ({
-              currentAmount: toMoneyNumber(bucket.currentAmount),
+              currentAmount: normalizeMoney(toMoneyNumber(bucket.currentAmount) - (changesAfter.buckets.get(bucket.id) ?? 0)),
               id: bucket.id,
               isLongTerm: bucket.isLongTerm,
               name: bucket.name,

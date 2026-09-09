@@ -45,6 +45,7 @@ function createValidBackup(): FinancialBackup {
         }
       ],
       savingsBuckets: [
+        { id: "long-term", name: "Largo plazo", currentAmount: "0", targetAmount: null, targetDate: null, priority: null, isLongTerm: true, notes: null, createdAt: timestamp, updatedAt: timestamp },
         {
           id: "bucket-1",
           name: "Reserva",
@@ -200,7 +201,7 @@ test("acepta un backup completo y calcula su resumen", () => {
     accounts: 1,
     transactions: 1,
     categories: 1,
-    savingsBuckets: 1,
+    savingsBuckets: 2,
     monthlyCloses: 1
   });
 });
@@ -294,6 +295,7 @@ test("acepta varias ocurrencias semanales de una plantilla en el mismo mes", () 
     ...backup.data.recurringTransactionOccurrences[0],
     id: "occurrence-2",
     scheduledDate: "2026-06-21T12:00:00.000Z",
+    status: "pending",
     generatedTransactionId: null
   });
 
@@ -315,4 +317,22 @@ test("rechaza dos ocurrencias de una plantilla en la misma fecha", () => {
   assert.equal(result.success, false);
   if (result.success) return;
   assert.match(result.errors.join(" "), /fechas de ocurrencias/);
+});
+
+test("rechaza importes negativos y ausencia de Largo plazo antes de restaurar", () => {
+  const negative = createValidBackup();
+  negative.data.transactions[0].amount = "-24.5";
+  assert.equal(validateBackup(negative).success, false);
+  const missing = createValidBackup();
+  missing.data.savingsBuckets = missing.data.savingsBuckets.filter(bucket => !bucket.isLongTerm);
+  assert.equal(validateBackup(missing).success, false);
+});
+
+test("rechaza transferencias sin destino y confirmaciones sin movimiento", () => {
+  const transfer = createValidBackup();
+  transfer.data.transactions[0].type = "transfer";
+  assert.equal(validateBackup(transfer).success, false);
+  const occurrence = createValidBackup();
+  occurrence.data.recurringTransactionOccurrences[0].generatedTransactionId = null;
+  assert.equal(validateBackup(occurrence).success, false);
 });

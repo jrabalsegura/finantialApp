@@ -2,18 +2,18 @@ import Link from "next/link";
 import type { WeeklyBudgetStatus } from "@/domain/weekly-budget";
 import { currencyFormatter } from "@/lib/formatters";
 
-const WEEKLY_VISIBLE_BUDGET_CAP = 500;
-
 export function WeeklyBudgetCard({
   closedMonthHref = "/monthly-close",
   isMonthClosed = false,
   monthLabel,
-  status
+  status,
+  weeklySpendingCap = 500
 }: {
   closedMonthHref?: string;
   isMonthClosed?: boolean;
   monthLabel?: string;
   status: WeeklyBudgetStatus;
+  weeklySpendingCap?: number;
 }) {
   if (isMonthClosed) {
     return (
@@ -49,7 +49,8 @@ export function WeeklyBudgetCard({
   }
 
   const visibleAvailableBudget = getVisibleAvailableBudget(
-    status.currentWeekAvailableBudget
+    status.currentWeekAvailableBudget,
+    weeklySpendingCap
   );
   const visibleWeekDifference = roundMoney(
     visibleAvailableBudget - status.currentWeekVariableExpense
@@ -177,8 +178,8 @@ export function WeeklyBudgetCard({
             >
               Disponible real por fórmula:{" "}
               {currencyFormatter.format(status.currentWeekAvailableBudget)}. La
-              card usa un máximo semanal de{" "}
-              {currencyFormatter.format(WEEKLY_VISIBLE_BUDGET_CAP)}.
+              tarjeta aplica tu límite semanal de{" "}
+              {currencyFormatter.format(weeklySpendingCap)}.
             </p>
           ) : null}
           {status.currentWeekTransferredOutOfAvailable > 0 ? (
@@ -230,8 +231,11 @@ export function WeeklyBudgetCard({
   );
 }
 
-function getVisibleAvailableBudget(currentWeekAvailableBudget: number): number {
-  return Math.min(currentWeekAvailableBudget, WEEKLY_VISIBLE_BUDGET_CAP);
+function getVisibleAvailableBudget(
+  currentWeekAvailableBudget: number,
+  weeklySpendingCap: number
+): number {
+  return Math.min(currentWeekAvailableBudget, weeklySpendingCap);
 }
 
 function getVisibleStatusMessage({

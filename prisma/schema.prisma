@@ -91,6 +91,7 @@ enum WeeklyBudgetImpactScope {
 model AppUser {
   id           String   @id @default(cuid())
   username     String   @unique
+  sessionVersion Int @default(0)
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -153,6 +154,7 @@ model SavingsBucket {
 
 model BudgetSetting {
   id                          String                      @id @default("default")
+  weeklySpendingCap            Decimal                     @default(500)
   monthlyMinimumSavingsTarget Decimal                     @default(300)
   savingsBucketId             String?
   calculationMode             WeeklyBudgetCalculationMode @default(remaining_days)
@@ -181,6 +183,8 @@ model Transaction {
   affectsMonthlySavings   Boolean         @default(false)
   affectsNetWorth         Boolean         @default(true)
   weeklyBudgetImpactScope WeeklyBudgetImpactScope @default(normal)
+  balanceDelta            Decimal?
+  savingsTransferId       String?
   reimbursementId         String?
   createdAt               DateTime        @default(now())
   updatedAt               DateTime        @updatedAt
@@ -194,6 +198,10 @@ model Transaction {
   originalReimbursement Reimbursement?                  @relation("OriginalReimbursementTransaction")
   recurringOccurrence   RecurringTransactionOccurrence?
   accountSnapshots      MonthlyAccountSnapshot[]
+
+  @@index([date])
+  @@index([monthlyCloseId])
+  @@index([savingsTransferId])
 }
 
 model RecurringTransaction {
@@ -297,6 +305,7 @@ model MonthlyClose {
   monthlySavings Decimal   @default(0)
   availableMoney Decimal   @default(0)
   netWorth       Decimal   @default(0)
+  deficitFromFreeSavings Decimal @default(0)
   longTermAssets Decimal   @default(0)
   notes          String?
   closedAt       DateTime?

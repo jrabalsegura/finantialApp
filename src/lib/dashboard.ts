@@ -12,6 +12,7 @@ import {
   calculatePendingReimbursements,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
+  calculateRealMonthlySavings,
   getMonthDateRange,
   toMoneyNumber
 } from "@/domain/financial-calculations";
@@ -38,11 +39,13 @@ const recentTransactionSelect = {
   destinationAccountId: true,
   monthlyCloseId: true,
   reimbursementId: true,
+  savingsTransferId: true,
   savingsBucketId: true,
   type: true,
   account: {
     select: {
       id: true,
+      includeInMonthlySavings: true,
       name: true
     }
   },
@@ -137,6 +140,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
             name: true
           }
         },
+        account: { select: { includeInMonthlySavings: true } },
         categoryId: true,
         date: true,
         amount: true,
@@ -200,7 +204,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         recurringTransaction: {
           include: {
             account: {
-              select: { name: true }
+              select: { name: true, includeInMonthlySavings: true }
             },
             destinationAccount: {
               select: { name: true }
@@ -217,13 +221,12 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
   ]);
 
   const defaultAccount =
-    accounts.find((account) => account.name === "Openbank principal") ??
     accounts.find((account) => account.isDefault) ??
     accounts[0];
   const pendingRecurringOccurrences = recurringOccurrences.filter(
     (occurrence) => occurrence.status === "pending"
   );
-  const recentTransactions = mergeRecentTransactions(
+  const recentTransactionsBaseMerged = mergeRecentTransactions(
     recentTransactionsBase,
     currentMonthRecentTransactions
   );
@@ -236,6 +239,8 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         }
       : bucket.currentAmount
   }));
+  const latestClosedPeriod = monthlyCloses[0];
+  const recentTransactions = recentTransactionsBaseMerged.map(transaction => ({ ...transaction, isPeriodClosed: !!latestClosedPeriod && (transaction.date.getFullYear() * 12 + transaction.date.getMonth() <= latestClosedPeriod.year * 12 + latestClosedPeriod.month - 1) }));
   const manualSavingsBuckets = displaySavingsBuckets.filter(
     (bucket) => !bucket.isLongTerm
   );
@@ -250,6 +255,7 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     currentMonth
   );
   const projectedMonthlyCashflow = calculateProjectedMonthlyCashflow({
+    actualSavings: calculateRealMonthlySavings(monthlyTransactions, currentYear, currentMonth),
     actualExpense: actualMonthlyExpense,
     actualIncome: actualMonthlyIncome,
     recurringOccurrences
@@ -316,8 +322,8 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         title: reimbursement.title,
         personName: reimbursement.personName,
         pendingAmount:
-          toMoneyNumber(reimbursement.expectedAmount) -
-          toMoneyNumber(reimbursement.paidAmount)
+          toMoneyNumber(toMoneyNumber(reimbursement.expectedAmount) -
+          toMoneyNumber(reimbursement.paidAmount))
       }))
   };
 }

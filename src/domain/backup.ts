@@ -1,4 +1,4 @@
-export const BACKUP_SCHEMA_VERSION = 7;
+export const BACKUP_SCHEMA_VERSION = 8;
 export const BACKUP_APP_NAME = "Finanzas personales";
 
 const ACCOUNT_TYPES = [
@@ -68,13 +68,10 @@ type CategoryType = (typeof CATEGORY_TYPES)[number];
 type TransactionType = (typeof TRANSACTION_TYPES)[number];
 type ReimbursementStatus = (typeof REIMBURSEMENT_STATUSES)[number];
 type WeeklyBudgetImpactScope = (typeof WEEKLY_BUDGET_IMPACT_SCOPES)[number];
-type RecurringTransactionType =
-  (typeof RECURRING_TRANSACTION_TYPES)[number];
-type RecurringAutoCreateMode =
-  (typeof RECURRING_AUTO_CREATE_MODES)[number];
+type RecurringTransactionType = (typeof RECURRING_TRANSACTION_TYPES)[number];
+type RecurringAutoCreateMode = (typeof RECURRING_AUTO_CREATE_MODES)[number];
 type RecurringFrequency = (typeof RECURRING_FREQUENCIES)[number];
-type RecurringOccurrenceStatus =
-  (typeof RECURRING_OCCURRENCE_STATUSES)[number];
+type RecurringOccurrenceStatus = (typeof RECURRING_OCCURRENCE_STATUSES)[number];
 type QuickTransactionTemplateType =
   (typeof QUICK_TRANSACTION_TEMPLATE_TYPES)[number];
 type WeeklyBudgetCalculationMode =
@@ -115,6 +112,8 @@ export type BackupSavingsBucket = TimestampedRecord & {
 };
 
 export type BackupTransaction = TimestampedRecord & {
+  balanceDelta?: string | null;
+  savingsTransferId?: string | null;
   date: string;
   amount: string;
   type: TransactionType;
@@ -146,6 +145,7 @@ export type BackupReimbursement = TimestampedRecord & {
 };
 
 export type BackupMonthlyClose = TimestampedRecord & {
+  deficitFromFreeSavings?: string;
   year: number;
   month: number;
   totalIncome: string;
@@ -221,6 +221,7 @@ export type BackupQuickTransactionTemplate = TimestampedRecord & {
 };
 
 export type BackupBudgetSetting = TimestampedRecord & {
+  weeklySpendingCap?: string;
   monthlyMinimumSavingsTarget: string;
   savingsBucketId: string | null;
   calculationMode: WeeklyBudgetCalculationMode;
@@ -310,10 +311,10 @@ export function validateBackup(input: unknown): BackupValidationResult {
 
     if (
       typeof input.metadata.schemaVersion === "number" &&
-      ![5, 6, BACKUP_SCHEMA_VERSION].includes(input.metadata.schemaVersion)
+      ![5, 6, 7, BACKUP_SCHEMA_VERSION].includes(input.metadata.schemaVersion)
     ) {
       errors.push(
-        `Versión de esquema incompatible: ${input.metadata.schemaVersion}. La aplicación admite las versiones 5, 6 y ${BACKUP_SCHEMA_VERSION}.`
+        `Versión de esquema incompatible: ${input.metadata.schemaVersion}. La aplicación admite las versiones 5, 6, 7 y ${BACKUP_SCHEMA_VERSION}.`
       );
     }
   }
@@ -395,6 +396,8 @@ export function validateBackup(input: unknown): BackupValidationResult {
     validateUniquenessAndRelations(input as unknown as FinancialBackup, errors);
   }
 
+  if (errors.length === 0)
+    validateFinancialIntegrity(input as unknown as FinancialBackup, errors);
   if (errors.length > 0) {
     return invalid(errors);
   }
@@ -447,11 +450,7 @@ function validateCategory(value: unknown, path: string, errors: string[]) {
   validateOptionalString(value.color, `${path}.color`, errors);
 }
 
-function validateSavingsBucket(
-  value: unknown,
-  path: string,
-  errors: string[]
-) {
+function validateSavingsBucket(value: unknown, path: string, errors: string[]) {
   if (!validateTimestampedRecord(value, path, errors)) return;
   validateRequiredString(value.name, `${path}.name`, errors);
   validateDecimal(value.currentAmount, `${path}.currentAmount`, errors);
@@ -464,6 +463,14 @@ function validateSavingsBucket(
 
 function validateTransaction(value: unknown, path: string, errors: string[]) {
   if (!validateTimestampedRecord(value, path, errors)) return;
+  if (value.savingsTransferId !== undefined)
+    validateOptionalString(
+      value.savingsTransferId,
+      `${path}.savingsTransferId`,
+      errors
+    );
+  if (value.balanceDelta !== undefined)
+    validateOptionalDecimal(value.balanceDelta, `${path}.balanceDelta`, errors);
   validateDate(value.date, `${path}.date`, errors);
   validateDecimal(value.amount, `${path}.amount`, errors);
   validateEnum(value.type, TRANSACTION_TYPES, `${path}.type`, errors);
@@ -528,11 +535,7 @@ function validateTransaction(value: unknown, path: string, errors: string[]) {
   );
 }
 
-function validateReimbursement(
-  value: unknown,
-  path: string,
-  errors: string[]
-) {
+function validateReimbursement(value: unknown, path: string, errors: string[]) {
   if (!validateTimestampedRecord(value, path, errors)) return;
   validateRequiredString(value.title, `${path}.title`, errors);
   validateRequiredString(value.personName, `${path}.personName`, errors);
@@ -543,18 +546,19 @@ function validateReimbursement(
   );
   validateDecimal(value.expectedAmount, `${path}.expectedAmount`, errors);
   validateDecimal(value.paidAmount, `${path}.paidAmount`, errors);
-  validateEnum(
-    value.status,
-    REIMBURSEMENT_STATUSES,
-    `${path}.status`,
-    errors
-  );
+  validateEnum(value.status, REIMBURSEMENT_STATUSES, `${path}.status`, errors);
   validateOptionalDate(value.dueDate, `${path}.dueDate`, errors);
   validateOptionalString(value.notes, `${path}.notes`, errors);
 }
 
 function validateMonthlyClose(value: unknown, path: string, errors: string[]) {
   if (!validateTimestampedRecord(value, path, errors)) return;
+  if (value.deficitFromFreeSavings !== undefined)
+    validateDecimal(
+      value.deficitFromFreeSavings,
+      `${path}.deficitFromFreeSavings`,
+      errors
+    );
   validateInteger(value.year, `${path}.year`, errors);
   validateMonth(value.month, `${path}.month`, errors);
   validateDecimal(value.totalIncome, `${path}.totalIncome`, errors);
@@ -579,11 +583,7 @@ function validateMonthlyAccountSnapshot(
     errors
   );
   validateRequiredString(value.accountId, `${path}.accountId`, errors);
-  validateDecimal(
-    value.calculatedBalance,
-    `${path}.calculatedBalance`,
-    errors
-  );
+  validateDecimal(value.calculatedBalance, `${path}.calculatedBalance`, errors);
   validateDecimal(value.realBalance, `${path}.realBalance`, errors);
   validateDecimal(value.difference, `${path}.difference`, errors);
   validateOptionalString(
@@ -619,12 +619,7 @@ function validateRecurringTransaction(
 ) {
   if (!validateTimestampedRecord(value, path, errors)) return;
   validateRequiredString(value.name, `${path}.name`, errors);
-  validateEnum(
-    value.type,
-    RECURRING_TRANSACTION_TYPES,
-    `${path}.type`,
-    errors
-  );
+  validateEnum(value.type, RECURRING_TRANSACTION_TYPES, `${path}.type`, errors);
   validateDecimal(value.amount, `${path}.amount`, errors);
   validateRequiredString(value.accountId, `${path}.accountId`, errors);
   validateOptionalString(
@@ -716,11 +711,7 @@ function validateQuickTransactionTemplate(
     `${path}.type`,
     errors
   );
-  validateOptionalDecimal(
-    value.defaultAmount,
-    `${path}.defaultAmount`,
-    errors
-  );
+  validateOptionalDecimal(value.defaultAmount, `${path}.defaultAmount`, errors);
   validateOptionalString(value.accountId, `${path}.accountId`, errors);
   validateOptionalString(
     value.destinationAccountId,
@@ -745,12 +736,14 @@ function validateQuickTransactionTemplate(
   validateBoolean(value.isActive, `${path}.isActive`, errors);
 }
 
-function validateBudgetSetting(
-  value: unknown,
-  path: string,
-  errors: string[]
-) {
+function validateBudgetSetting(value: unknown, path: string, errors: string[]) {
   if (!validateTimestampedRecord(value, path, errors)) return;
+  if (value.weeklySpendingCap !== undefined)
+    validateDecimal(
+      value.weeklySpendingCap,
+      `${path}.weeklySpendingCap`,
+      errors
+    );
   validateDecimal(
     value.monthlyMinimumSavingsTarget,
     `${path}.monthlyMinimumSavingsTarget`,
@@ -867,8 +860,7 @@ function validateUniquenessAndRelations(
   );
   validateUniqueComposite(
     data.recurringTransactionOccurrences,
-    (record) =>
-      `${record.recurringTransactionId}:${record.scheduledDate}`,
+    (record) => `${record.recurringTransactionId}:${record.scheduledDate}`,
     "fechas de ocurrencias recurrentes",
     errors
   );
@@ -1135,7 +1127,9 @@ function validateDecimal(value: unknown, path: string, errors: string[]) {
     typeof value !== "string" ||
     value.trim().length === 0 ||
     !/^-?(?:\d+\.?\d*|\.\d+)$/.test(value.trim()) ||
-    !Number.isFinite(Number(value))
+    !Number.isFinite(Number(value)) ||
+    Math.abs(Number(value)) > 1_000_000_000_000 ||
+    Math.abs(Number(value) * 100 - Math.round(Number(value) * 100)) > 0.0001
   ) {
     errors.push(`${path} debe ser un importe numérico en formato texto.`);
   }
@@ -1160,11 +1154,7 @@ function validateDate(value: unknown, path: string, errors: string[]) {
   }
 }
 
-function validateOptionalDate(
-  value: unknown,
-  path: string,
-  errors: string[]
-) {
+function validateOptionalDate(value: unknown, path: string, errors: string[]) {
   if (value === null) return;
   validateDate(value, path, errors);
 }
@@ -1270,4 +1260,206 @@ function invalid(errors: string | string[]): BackupValidationResult {
     summary: null,
     errors: Array.isArray(errors) ? errors : [errors]
   };
+}
+
+function validateFinancialIntegrity(backup: FinancialBackup, errors: string[]) {
+  const { data } = backup;
+  const cents = (value: string) => Math.round(Number(value) * 100);
+  const positive = (value: string, label: string) => {
+    if (cents(value) <= 0)
+      errors.push(`${label}: el importe debe ser mayor que cero.`);
+  };
+  const nonNegative = (value: string, label: string) => {
+    if (cents(value) < 0)
+      errors.push(`${label}: el importe no puede ser negativo.`);
+  };
+  const buckets = new Map(data.savingsBuckets.map((b) => [b.id, b]));
+  const transactions = new Map(data.transactions.map((t) => [t.id, t]));
+  const categories = new Map(data.categories.map((c) => [c.id, c]));
+  if (data.savingsBuckets.filter((b) => b.isLongTerm).length !== 1)
+    errors.push(
+      "La copia debe contener exactamente una partida de Largo plazo."
+    );
+  if (
+    data.accounts.length &&
+    data.accounts.filter((a) => a.isDefault).length !== 1
+  )
+    errors.push("La copia debe tener exactamente una cuenta predeterminada.");
+  for (const bucket of data.savingsBuckets) {
+    if (!bucket.isLongTerm)
+      nonNegative(bucket.currentAmount, `Partida ${bucket.name}`);
+    if (bucket.targetAmount !== null)
+      positive(bucket.targetAmount, `Objetivo ${bucket.name}`);
+  }
+  const groups = new Map<string, BackupTransaction[]>();
+  for (const transaction of data.transactions) {
+    positive(transaction.amount, `Movimiento ${transaction.id}`);
+    if (
+      transaction.type === "transfer" &&
+      (!transaction.destinationAccountId ||
+        transaction.destinationAccountId === transaction.accountId)
+    )
+      errors.push(
+        `La transferencia ${transaction.id} necesita dos cuentas distintas.`
+      );
+    if (
+      ["savings_allocation", "savings_withdrawal"].includes(transaction.type) &&
+      (!transaction.savingsBucketId ||
+        buckets.get(transaction.savingsBucketId)?.isLongTerm)
+    )
+      errors.push(
+        `El movimiento ${transaction.id} necesita una partida manual.`
+      );
+    if (
+      transaction.type === "reimbursement_income" &&
+      !transaction.reimbursementId
+    )
+      errors.push(`El cobro ${transaction.id} necesita un reembolso.`);
+    if (
+      transaction.balanceDelta != null &&
+      (transaction.type !== "balance_adjustment" ||
+        Math.abs(cents(transaction.balanceDelta)) !== cents(transaction.amount))
+    )
+      errors.push(
+        `El ajuste ${transaction.id} tiene un impacto de saldo incoherente.`
+      );
+    if (transaction.savingsTransferId)
+      groups.set(transaction.savingsTransferId, [
+        ...(groups.get(transaction.savingsTransferId) ?? []),
+        transaction
+      ]);
+  }
+  for (const [id, legs] of groups) {
+    if (
+      legs.length !== 2 ||
+      legs.filter((t) => t.type === "savings_allocation").length !== 1 ||
+      legs.filter((t) => t.type === "savings_withdrawal").length !== 1 ||
+      cents(legs[0].amount) !== cents(legs[1].amount) ||
+      legs[0].savingsBucketId === legs[1].savingsBucketId ||
+      legs.some((t) => t.affectsRealBalance)
+    )
+      errors.push(
+        `La transferencia entre partidas ${id} está incompleta o es incoherente.`
+      );
+  }
+  for (const reimbursement of data.reimbursements) {
+    positive(reimbursement.expectedAmount, `Reembolso ${reimbursement.id}`);
+    nonNegative(reimbursement.paidAmount, `Cobrado ${reimbursement.id}`);
+    const original = transactions.get(reimbursement.originalTransactionId);
+    if (
+      original?.type !== "reimbursable_expense" ||
+      cents(reimbursement.expectedAmount) > cents(original.amount)
+    )
+      errors.push(
+        `El reembolso ${reimbursement.id} no corresponde a un gasto reembolsable válido.`
+      );
+    const paid = cents(reimbursement.paidAmount),
+      expected = cents(reimbursement.expectedAmount);
+    const payments = data.transactions
+      .filter(
+        (t) =>
+          t.reimbursementId === reimbursement.id &&
+          t.type === "reimbursement_income"
+      )
+      .reduce((sum, t) => sum + cents(t.amount), 0);
+    if (
+      paid > expected ||
+      paid !== payments ||
+      (reimbursement.status === "paid" && paid !== expected) ||
+      (reimbursement.status === "pending" && paid !== 0) ||
+      (reimbursement.status === "partially_paid" &&
+        (paid <= 0 || paid >= expected))
+    )
+      errors.push(
+        `Los cobros y el estado del reembolso ${reimbursement.id} no cuadran.`
+      );
+  }
+  for (const recurring of data.recurringTransactions) {
+    positive(recurring.amount, `Recurrente ${recurring.id}`);
+    if (
+      recurring.endDate &&
+      new Date(recurring.endDate) < new Date(recurring.startDate)
+    )
+      errors.push(`El recurrente ${recurring.id} termina antes de empezar.`);
+    if (
+      recurring.type === "transfer" &&
+      (!recurring.destinationAccountId ||
+        recurring.accountId === recurring.destinationAccountId)
+    )
+      errors.push(
+        `El recurrente ${recurring.id} necesita dos cuentas distintas.`
+      );
+    if (
+      recurring.type === "savings_allocation" &&
+      (!recurring.savingsBucketId ||
+        buckets.get(recurring.savingsBucketId)?.isLongTerm)
+    )
+      errors.push(`El recurrente ${recurring.id} necesita una partida manual.`);
+    const category = recurring.categoryId
+      ? categories.get(recurring.categoryId)
+      : null;
+    if (
+      category &&
+      category.type !== "both" &&
+      category.type !== recurring.type
+    )
+      errors.push(
+        `La categoría del recurrente ${recurring.id} no corresponde a su tipo.`
+      );
+  }
+  for (const occurrence of data.recurringTransactionOccurrences) {
+    positive(occurrence.amount, `Ocurrencia ${occurrence.id}`);
+    if (
+      (occurrence.status === "confirmed") !==
+      !!occurrence.generatedTransactionId
+    )
+      errors.push(
+        `La confirmación de ${occurrence.id} no corresponde a su movimiento.`
+      );
+    const generated = occurrence.generatedTransactionId
+      ? transactions.get(occurrence.generatedTransactionId)
+      : null;
+    if (generated && cents(generated.amount) !== cents(occurrence.amount))
+      errors.push(
+        `El importe confirmado de ${occurrence.id} no coincide con el movimiento.`
+      );
+    const date = new Date(occurrence.scheduledDate);
+    if (
+      date.getFullYear() !== occurrence.year ||
+      date.getMonth() + 1 !== occurrence.month
+    )
+      errors.push(`La ocurrencia ${occurrence.id} pertenece a otro período.`);
+  }
+  for (const template of data.quickTransactionTemplates)
+    if (template.defaultAmount !== null)
+      positive(template.defaultAmount, `Plantilla ${template.id}`);
+  for (const setting of data.budgetSettings) {
+    nonNegative(setting.monthlyMinimumSavingsTarget, "Objetivo de ahorro");
+    if (setting.weeklySpendingCap !== undefined)
+      nonNegative(setting.weeklySpendingCap, "Límite semanal");
+  }
+  for (const close of data.monthlyCloses) {
+    if (close.year < 2000 || close.year > 2100)
+      errors.push(`El cierre ${close.id} tiene un año inválido.`);
+    if (close.deficitFromFreeSavings !== undefined) {
+      nonNegative(
+        close.deficitFromFreeSavings,
+        "Déficit cubierto con ahorro libre"
+      );
+      if (
+        cents(close.deficitFromFreeSavings) >
+        Math.max(-cents(close.monthlySavings), 0)
+      )
+        errors.push(
+          `La cobertura del déficit de ${close.id} supera la pérdida mensual.`
+        );
+    }
+  }
+  for (const snapshot of data.monthlyAccountSnapshots) {
+    if (
+      cents(snapshot.realBalance) - cents(snapshot.calculatedBalance) !==
+      cents(snapshot.difference)
+    )
+      errors.push(`Los saldos del snapshot ${snapshot.id} no cuadran.`);
+  }
 }

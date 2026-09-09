@@ -1,3 +1,4 @@
+import { restoreLegacyFinancialLinks } from "./legacy-financial-links";
 import type { Prisma, WeeklyBudgetImpactScope } from "@prisma/client";
 import packageJson from "../../package.json";
 import {
@@ -70,6 +71,7 @@ export async function exportBackup(): Promise<FinancialBackup> {
         ...record,
         date: record.date.toISOString(),
         amount: record.amount.toString(),
+        balanceDelta: record.balanceDelta?.toString() ?? null,
         createdAt: record.createdAt.toISOString(),
         updatedAt: record.updatedAt.toISOString()
       })),
@@ -89,6 +91,7 @@ export async function exportBackup(): Promise<FinancialBackup> {
         availableMoney: record.availableMoney.toString(),
         netWorth: record.netWorth.toString(),
         longTermAssets: record.longTermAssets.toString(),
+        deficitFromFreeSavings: record.deficitFromFreeSavings.toString(),
         closedAt: record.closedAt?.toISOString() ?? null,
         createdAt: record.createdAt.toISOString(),
         updatedAt: record.updatedAt.toISOString()
@@ -127,6 +130,7 @@ export async function exportBackup(): Promise<FinancialBackup> {
       })),
       budgetSettings: budgetSettings.map((record) => ({
         ...record,
+        weeklySpendingCap: record.weeklySpendingCap.toString(),
         monthlyMinimumSavingsTarget:
           record.monthlyMinimumSavingsTarget.toString(),
         createdAt: record.createdAt.toISOString(),
@@ -199,6 +203,7 @@ export async function importBackup(input: unknown): Promise<void> {
               weeklyBudgetImpactScope,
               excludeFromWeeklyBudget
             ),
+            balanceDelta: record.balanceDelta ?? data.monthlyAccountSnapshots.find(snapshot => snapshot.adjustmentTransactionId === record.id)?.difference ?? null,
             monthlyCloseId: null,
             reimbursementId: null,
             date: new Date(record.date),
@@ -291,6 +296,7 @@ export async function importBackup(input: unknown): Promise<void> {
       await tx.monthlyBucketSnapshot.createMany({
         data: data.monthlyBucketSnapshots
       });
+      await restoreLegacyFinancialLinks(tx);
     },
     {
       maxWait: 10_000,

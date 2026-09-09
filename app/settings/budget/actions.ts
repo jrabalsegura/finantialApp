@@ -1,4 +1,6 @@
 "use server";
+import { requireCurrentUser } from "@/lib/auth";
+
 
 import {
   WeeklyBudgetCalculationMode,
@@ -15,9 +17,11 @@ const VALID_CALCULATION_MODES = new Set<WeeklyBudgetCalculationMode>([
 ]);
 
 export async function updateBudgetSetting(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const monthlyMinimumSavingsTarget = parseNonNegativeAmount(
     formData.get("monthlyMinimumSavingsTarget")
   );
+  const weeklySpendingCap = parseNonNegativeAmount(formData.get("weeklySpendingCap"));
   const savingsBucketId = parseOptionalString(formData.get("savingsBucketId"));
   const calculationMode = parseCalculationMode(
     formData.get("calculationMode")
@@ -32,6 +36,7 @@ export async function updateBudgetSetting(formData: FormData): Promise<void> {
     await tx.budgetSetting.upsert({
       where: { id: DEFAULT_BUDGET_SETTING_ID },
       update: {
+        weeklySpendingCap,
         monthlyMinimumSavingsTarget,
         savingsBucketId,
         calculationMode,
@@ -40,6 +45,7 @@ export async function updateBudgetSetting(formData: FormData): Promise<void> {
       },
       create: {
         id: DEFAULT_BUDGET_SETTING_ID,
+        weeklySpendingCap,
         monthlyMinimumSavingsTarget,
         savingsBucketId,
         calculationMode,

@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { TransactionType } from "@prisma/client";
@@ -19,6 +21,7 @@ export default async function AccountHistoryPage({
 }: {
   params: Promise<{ accountId: string }>;
 }) {
+  await requireCurrentUser();
   const { accountId } = await params;
   const account = await prisma.account.findUnique({
     where: { id: accountId },

@@ -1,3 +1,7 @@
+import { undoSavingsTransfer } from "../../actions";
+import { ConfirmSubmitButton } from "../../components/ConfirmSubmitButton";
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { TransactionType } from "@prisma/client";
@@ -19,6 +23,7 @@ export default async function SavingsBucketHistoryPage({
 }: {
   params: Promise<{ bucketId: string }>;
 }) {
+  await requireCurrentUser();
   const { bucketId } = await params;
   const bucket = await prisma.savingsBucket.findUnique({
     where: { id: bucketId },
@@ -70,7 +75,9 @@ export default async function SavingsBucketHistoryPage({
   const currentAmount = bucket.isLongTerm
     ? calculateLongTermBucketBalance(accounts)
     : toMoneyNumber(bucket.currentAmount);
-  const targetAmount = bucket.targetAmount ? toMoneyNumber(bucket.targetAmount) : null;
+  const targetAmount = bucket.targetAmount
+    ? toMoneyNumber(bucket.targetAmount)
+    : null;
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-8 sm:py-8">
@@ -153,6 +160,21 @@ export default async function SavingsBucketHistoryPage({
                     >
                       {formatSignedAmount(signedAmount)}
                     </p>
+                    {transaction.savingsTransferId ? (
+                      <form action={undoSavingsTransfer}>
+                        <input
+                          type="hidden"
+                          name="savingsTransferId"
+                          value={transaction.savingsTransferId}
+                        />
+                        <ConfirmSubmitButton
+                          className="text-sm font-semibold text-accent"
+                          confirmMessage="Se deshará la transferencia completa y se devolverá el importe a la partida de origen."
+                        >
+                          Deshacer transferencia
+                        </ConfirmSubmitButton>
+                      </form>
+                    ) : null}
                   </li>
                 );
               })}
@@ -192,7 +214,11 @@ function formatSignedAmount(amount: number): string {
 }
 
 function getSignedBucketAmount(transaction: {
-  amount: { toNumber: () => number } | { toString: () => string } | number | string;
+  amount:
+    | { toNumber: () => number }
+    | { toString: () => string }
+    | number
+    | string;
   type: TransactionType;
 }): number {
   const amount = toMoneyNumber(transaction.amount);

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireCurrentUser } from "@/lib/auth";
+import { createUserSession, requireCurrentUser } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
@@ -54,10 +54,12 @@ export async function changePassword(
   await prisma.appUser.update({
     where: { id: currentUser.id },
     data: {
+      sessionVersion: { increment: 1 },
       passwordHash: await hashPassword(newPassword)
     }
   });
 
+  await createUserSession(currentUser.id);
   revalidatePath("/settings/security");
 
   return {

@@ -1,8 +1,22 @@
 "use server";
+import { adjustBucketBalance, adjustAccountBalance } from "@/lib/balances";
+
+import { requireCurrentUser } from "@/lib/auth";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { AccountType, Prisma, WeeklyBudgetImpactScope } from "@prisma/client";
+import type {
+  AccountType,
+  Prisma,
+  WeeklyBudgetImpactScope
+} from "@prisma/client";
+import { undoSavingsTransferInTransaction } from "@/lib/savings-transfers";
+import { randomUUID } from "node:crypto";
+import { assertPeriodOpen } from "@/lib/closed-periods";
+import {
+  getChangesAfter,
+  getReimbursementsAt
+} from "@/lib/historical-balances";
 import { prisma } from "@/lib/prisma";
 import {
   accountFeedsLongTermBucket,
@@ -15,6 +29,7 @@ import {
   calculateRealMonthlyIncome,
   calculateRealMonthlySavings,
   getDefaultTransactionImpact,
+  getDeficitFunding,
   getManualMonthlyCloseResult,
   getMonthDateRange,
   toMoneyNumber,
@@ -57,12 +72,13 @@ type MonthlyCloseAdjustmentImpact = {
 const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>(
   QUICK_TRANSACTION_TYPES
 );
-const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS = new Set<MonthlyCloseAdjustmentKind>([
-  "expense",
-  "income",
-  "technical",
-  "unassigned_savings"
-]);
+const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS =
+  new Set<MonthlyCloseAdjustmentKind>([
+    "expense",
+    "income",
+    "technical",
+    "unassigned_savings"
+  ]);
 const VALID_ACCOUNT_TYPES = new Set<AccountType>(ACCOUNT_TYPES);
 const EDITABLE_TRANSACTION_TYPES = new Set<QuickTransactionType>([
   "expense",
@@ -81,6 +97,7 @@ export async function createQuickTransaction(
   _previousState: TransactionFormState,
   formData: FormData
 ): Promise<TransactionFormState> {
+  await requireCurrentUser();
   try {
     const type = parseTransactionType(formData.get("type"));
     const amount = parseAmount(formData.get("amount"));
@@ -90,9 +107,7 @@ export async function createQuickTransaction(
         ? parseRequiredString(formData.get("destinationAccountId"))
         : null;
     const categoryId =
-      type === "expense" ||
-      type === "income" ||
-      type === "reimbursable_expense"
+      type === "expense" || type === "income" || type === "reimbursable_expense"
         ? parseOptionalString(formData.get("categoryId"))
         : null;
     const savingsBucketId =
@@ -145,7 +160,10 @@ export async function createQuickTransaction(
   }
 }
 
-export async function updateRecentTransaction(formData: FormData): Promise<void> {
+export async function updateRecentTransaction(
+  formData: FormData
+): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const type = parseEditableTransactionType(formData.get("type"));
   const amount = parseAmount(formData.get("amount"));
@@ -174,6 +192,7 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
       allowConfirmedRecurring: true
     });
 
+    await assertPeriodOpen(tx, date);
     if (transaction.recurringOccurrence && type !== transaction.type) {
       throw new Error(
         "No se puede cambiar el tipo de un movimiento fijo confirmado."
@@ -227,14 +246,7 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
     await applyBalanceDeltas(tx, rules.balanceDeltas);
 
     if (rules.savingsBucketDelta > 0 && savingsBucketId) {
-      await tx.savingsBucket.update({
-        where: { id: savingsBucketId },
-        data: {
-          currentAmount: {
-            increment: rules.savingsBucketDelta
-          }
-        }
-      });
+      await adjustBucketBalance(tx, savingsBucketId, rules.savingsBucketDelta);
     }
 
     if (transaction.recurringOccurrence) {
@@ -250,7 +262,10 @@ export async function updateRecentTransaction(formData: FormData): Promise<void>
   revalidateTransactionViews();
 }
 
-export async function deleteRecentTransaction(formData: FormData): Promise<void> {
+export async function deleteRecentTransaction(
+  formData: FormData
+): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
 
   await prisma.$transaction(async (tx) => {
@@ -279,6 +294,7 @@ export async function deleteRecentTransaction(formData: FormData): Promise<void>
 export async function createReimbursableExpense(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const amount = parseAmount(formData.get("amount"));
   const accountId = parseRequiredString(formData.get("accountId"));
   const categoryId = parseOptionalString(formData.get("categoryId"));
@@ -294,6 +310,7 @@ export async function createReimbursableExpense(
   });
 
   await prisma.$transaction(async (tx) => {
+    await assertPeriodOpen(tx, date);
     await assertAccountExists(tx, accountId);
 
     if (categoryId) {
@@ -338,6 +355,7 @@ export async function createReimbursableExpense(
 export async function recordReimbursementPayment(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const reimbursementId = parseRequiredString(formData.get("reimbursementId"));
   const accountId = parseRequiredString(formData.get("accountId"));
   const amount = parseAmount(formData.get("amount"));
@@ -349,6 +367,7 @@ export async function recordReimbursementPayment(
   });
 
   await prisma.$transaction(async (tx) => {
+    await assertPeriodOpen(tx, date);
     await assertAccountExists(tx, accountId);
 
     const reimbursement = await tx.reimbursement.findUnique({
@@ -415,9 +434,11 @@ export async function recordReimbursementPayment(
 export async function convertReimbursementToRealExpense(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const reimbursementId = parseRequiredString(formData.get("reimbursementId"));
 
   await prisma.$transaction(async (tx) => {
+    await assertPeriodOpen(tx, new Date());
     const reimbursement = await tx.reimbursement.findUnique({
       where: { id: reimbursementId },
       include: {
@@ -433,9 +454,10 @@ export async function convertReimbursementToRealExpense(
       throw new Error("Este pendiente ya no se puede convertir.");
     }
 
-    const pendingAmount =
+    const pendingAmount = normalizeMoney(
       toMoneyNumber(reimbursement.expectedAmount) -
-      toMoneyNumber(reimbursement.paidAmount);
+        toMoneyNumber(reimbursement.paidAmount)
+    );
 
     if (pendingAmount <= 0) {
       throw new Error("No queda importe pendiente por convertir.");
@@ -451,6 +473,7 @@ export async function convertReimbursementToRealExpense(
         date: new Date(),
         amount: pendingAmount,
         type: "expense",
+        reimbursementId,
         description: `Convertido en gasto real: ${reimbursement.title}`,
         accountId: reimbursement.originalTransaction.accountId,
         categoryId: reimbursement.originalTransaction.categoryId,
@@ -474,9 +497,12 @@ export async function convertReimbursementToRealExpense(
 }
 
 export async function createAccount(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const name = parseRequiredString(formData.get("name"));
   const type = parseAccountType(formData.get("type"));
-  const currentBalance = parseAmountAllowingZero(formData.get("currentBalance"));
+  const currentBalance = parseAmountAllowingZero(
+    formData.get("currentBalance")
+  );
   const includeInAvailableMoney = parseCheckbox(
     formData.get("includeInAvailableMoney")
   );
@@ -497,7 +523,7 @@ export async function createAccount(formData: FormData): Promise<void> {
       });
     }
 
-    await tx.account.create({
+    const account = await tx.account.create({
       data: {
         name,
         type,
@@ -509,16 +535,40 @@ export async function createAccount(formData: FormData): Promise<void> {
         notes
       }
     });
+    if (currentBalance !== 0) {
+      await assertPeriodOpen(tx, new Date());
+      await tx.transaction.create({
+        data: {
+          date: new Date(),
+          accountId: account.id,
+          type: "balance_adjustment",
+          amount: Math.abs(currentBalance),
+          balanceDelta: currentBalance,
+          description: "Saldo inicial de la cuenta",
+          affectsRealBalance: true,
+          affectsPersonalExpense: false,
+          affectsPersonalIncome: false,
+          affectsMonthlySavings: false,
+          affectsNetWorth: true
+        }
+      });
+    }
   });
 
   revalidateAccountViews();
 }
 
 export async function updateAccount(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const name = parseRequiredString(formData.get("name"));
   const type = parseAccountType(formData.get("type"));
-  const currentBalance = parseAmountAllowingZero(formData.get("currentBalance"));
+  const currentBalance = parseAmountAllowingZero(
+    formData.get("currentBalance")
+  );
+  const originalBalance = parseAmountAllowingZero(
+    formData.get("originalBalance")
+  );
   const includeInAvailableMoney = parseCheckbox(
     formData.get("includeInAvailableMoney")
   );
@@ -530,6 +580,31 @@ export async function updateAccount(formData: FormData): Promise<void> {
   const notes = parseOptionalString(formData.get("notes"));
 
   await prisma.$transaction(async (tx) => {
+    const account = await tx.account.findUniqueOrThrow({ where: { id } });
+    const balanceChanged = currentBalance !== originalBalance;
+    if (balanceChanged) {
+      if (originalBalance !== toMoneyNumber(account.currentBalance))
+        throw new Error(
+          "El saldo ha cambiado desde que abriste el formulario. Recarga antes de corregirlo."
+        );
+      await assertPeriodOpen(tx, new Date());
+      const delta = normalizeMoney(currentBalance - originalBalance);
+      await tx.transaction.create({
+        data: {
+          date: new Date(),
+          type: "balance_adjustment",
+          amount: Math.abs(delta),
+          balanceDelta: delta,
+          accountId: id,
+          description: "Corrección manual de saldo",
+          affectsRealBalance: true,
+          affectsPersonalExpense: false,
+          affectsPersonalIncome: false,
+          affectsMonthlySavings: false,
+          affectsNetWorth: true
+        }
+      });
+    }
     if (isDefault) {
       await tx.account.updateMany({
         where: {
@@ -546,7 +621,7 @@ export async function updateAccount(formData: FormData): Promise<void> {
       data: {
         name,
         type,
-        currentBalance,
+        ...(balanceChanged ? { currentBalance } : {}),
         includeInAvailableMoney,
         includeInNetWorth,
         includeInMonthlySavings,
@@ -572,6 +647,7 @@ export async function updateAccount(formData: FormData): Promise<void> {
 }
 
 export async function deleteAccount(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
 
   await prisma.$transaction(async (tx) => {
@@ -629,6 +705,7 @@ export async function deleteAccount(formData: FormData): Promise<void> {
 }
 
 export async function createSavingsBucket(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const name = parseRequiredString(formData.get("name"));
   const currentAmount = parseNonNegativeAmountAllowingZero(
     formData.get("currentAmount")
@@ -640,15 +717,39 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
   const priority = parseOptionalInteger(formData.get("priority"));
   const notes = parseOptionalString(formData.get("notes"));
 
-  await prisma.savingsBucket.create({
-    data: {
-      name,
-      currentAmount,
-      targetAmount,
-      targetDate,
-      priority,
-      isLongTerm: false,
-      notes
+  await prisma.$transaction(async (tx) => {
+    const bucket = await tx.savingsBucket.create({
+      data: {
+        name,
+        currentAmount,
+        targetAmount,
+        targetDate,
+        priority,
+        isLongTerm: false,
+        notes
+      }
+    });
+    if (currentAmount > 0) {
+      await assertPeriodOpen(tx, new Date());
+      const account = await tx.account.findFirst({
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        select: { id: true }
+      });
+      if (!account)
+        throw new Error(
+          "Crea una cuenta antes de registrar el saldo inicial de una partida."
+        );
+      await tx.transaction.create({
+        data: {
+          date: new Date(),
+          accountId: account.id,
+          savingsBucketId: bucket.id,
+          type: "savings_allocation",
+          amount: currentAmount,
+          description: "Ahorro previo asignado al crear la partida",
+          ...getDefaultTransactionImpact("savings_allocation")
+        }
+      });
     }
   });
 
@@ -656,6 +757,7 @@ export async function createSavingsBucket(formData: FormData): Promise<void> {
 }
 
 export async function updateSavingsBucket(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const name = parseRequiredString(formData.get("name"));
   const targetAmount = parseOptionalNonNegativeAmount(
@@ -680,6 +782,7 @@ export async function updateSavingsBucket(formData: FormData): Promise<void> {
 }
 
 export async function deleteSavingsBucket(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
 
   await prisma.$transaction(async (tx) => {
@@ -693,7 +796,9 @@ export async function deleteSavingsBucket(formData: FormData): Promise<void> {
     }
 
     if (bucket.isLongTerm) {
-      throw new Error("La partida Largo plazo es derivada y no se puede eliminar.");
+      throw new Error(
+        "La partida Largo plazo es derivada y no se puede eliminar."
+      );
     }
 
     const relatedTransactions = await tx.transaction.count({
@@ -725,6 +830,7 @@ export async function deleteSavingsBucket(formData: FormData): Promise<void> {
 export async function transferBetweenSavingsBuckets(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const sourceBucketId = parseRequiredString(formData.get("sourceBucketId"));
   const destinationBucketId = parseRequiredString(
     formData.get("destinationBucketId")
@@ -737,29 +843,32 @@ export async function transferBetweenSavingsBuckets(
   }
 
   await prisma.$transaction(async (tx) => {
-    const [sourceBucket, destinationBucket, defaultAccount] = await Promise.all([
-      tx.savingsBucket.findUnique({
-        where: { id: sourceBucketId },
-        select: {
-          currentAmount: true,
-          id: true,
-          isLongTerm: true,
-          name: true
-        }
-      }),
-      tx.savingsBucket.findUnique({
-        where: { id: destinationBucketId },
-        select: {
-          id: true,
-          isLongTerm: true,
-          name: true
-        }
-      }),
-      tx.account.findFirst({
-        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-        select: { id: true }
-      })
-    ]);
+    await assertPeriodOpen(tx, new Date());
+    const [sourceBucket, destinationBucket, defaultAccount] = await Promise.all(
+      [
+        tx.savingsBucket.findUnique({
+          where: { id: sourceBucketId },
+          select: {
+            currentAmount: true,
+            id: true,
+            isLongTerm: true,
+            name: true
+          }
+        }),
+        tx.savingsBucket.findUnique({
+          where: { id: destinationBucketId },
+          select: {
+            id: true,
+            isLongTerm: true,
+            name: true
+          }
+        }),
+        tx.account.findFirst({
+          orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+          select: { id: true }
+        })
+      ]
+    );
 
     if (!sourceBucket || !destinationBucket) {
       throw new Error("La partida de ahorro seleccionada no existe.");
@@ -772,40 +881,31 @@ export async function transferBetweenSavingsBuckets(
     }
 
     if (!defaultAccount) {
-      throw new Error("No hay cuenta disponible para registrar la transferencia.");
+      throw new Error(
+        "No hay cuenta disponible para registrar la transferencia."
+      );
     }
 
     if (amount > toMoneyNumber(sourceBucket.currentAmount)) {
       throw new Error("No hay suficiente saldo en la partida de origen.");
     }
 
+    const savingsTransferId = randomUUID();
+    const date = new Date();
     const withdrawalImpact = getDefaultTransactionImpact("savings_withdrawal");
     const allocationImpact = getDefaultTransactionImpact("savings_allocation");
     const transferDescription =
       description ??
       `Transferencia entre partidas: ${sourceBucket.name} -> ${destinationBucket.name}`;
 
-    await tx.savingsBucket.update({
-      where: { id: sourceBucket.id },
-      data: {
-        currentAmount: {
-          decrement: amount
-        }
-      }
-    });
+    await adjustBucketBalance(tx, sourceBucket.id, -amount);
 
-    await tx.savingsBucket.update({
-      where: { id: destinationBucket.id },
-      data: {
-        currentAmount: {
-          increment: amount
-        }
-      }
-    });
+    await adjustBucketBalance(tx, destinationBucket.id, amount);
 
     await tx.transaction.create({
       data: {
-        date: new Date(),
+        date,
+        savingsTransferId,
         amount,
         type: "savings_withdrawal",
         description: transferDescription,
@@ -821,7 +921,8 @@ export async function transferBetweenSavingsBuckets(
 
     await tx.transaction.create({
       data: {
-        date: new Date(),
+        date,
+        savingsTransferId,
         amount,
         type: "savings_allocation",
         description: transferDescription,
@@ -839,10 +940,18 @@ export async function transferBetweenSavingsBuckets(
   revalidateSavingsViews();
 }
 
+export async function undoSavingsTransfer(formData: FormData): Promise<void> {
+  await requireCurrentUser();
+  const id = parseRequiredString(formData.get("savingsTransferId"));
+  await prisma.$transaction((tx) => undoSavingsTransferInTransaction(tx, id));
+  revalidateSavingsViews();
+}
+
 export async function closeMonth(
   _previousState: MonthlyCloseFormState,
   formData: FormData
 ): Promise<MonthlyCloseFormState> {
+  await requireCurrentUser();
   try {
     const year = parseCloseYear(formData.get("year"));
     const month = parseCloseMonth(formData.get("month"));
@@ -851,6 +960,10 @@ export async function closeMonth(
     const closeDate = new Date(year, month, 0, 12);
 
     await prisma.$transaction(async (tx) => {
+      await assertPeriodOpen(tx, monthRange.start);
+      if (monthRange.start > new Date())
+        throw new Error("No se puede cerrar un mes futuro.");
+      const changesAfter = await getChangesAfter(tx, monthRange.end);
       const existingClose = await tx.monthlyClose.findUnique({
         where: {
           year_month: {
@@ -913,10 +1026,23 @@ export async function closeMonth(
       }> = [];
       const generatedCloseTransactionIds: string[] = [];
       const closedAccounts = accounts.map((account) => {
-        const calculatedBalance = toMoneyNumber(account.currentBalance);
+        const calculatedBalance = normalizeMoney(
+          toMoneyNumber(account.currentBalance) -
+            (changesAfter.accounts.get(account.id) ?? 0)
+        );
         const realBalance = parseAmountAllowingZero(
           formData.get(`realBalance_${account.id}`)
         );
+        const displayedBalance = formData.get(
+          `calculatedBalance_${account.id}`
+        );
+        if (
+          displayedBalance !== null &&
+          parseAmountAllowingZero(displayedBalance) !== calculatedBalance
+        )
+          throw new Error(
+            "Han cambiado los movimientos del mes. Recarga el cierre antes de confirmar los saldos."
+          );
         const difference = roundMoney(realBalance - calculatedBalance);
         const adjustmentKind = parseMonthlyCloseAdjustmentKind(
           formData.get(`adjustmentKind_${account.id}`)
@@ -945,7 +1071,7 @@ export async function closeMonth(
 
         validateAdjustmentDirection(account.adjustmentKind, account.difference);
 
-        const impact = accountFeedsLongTermBucket(account)
+        const impact = !account.includeInMonthlySavings
           ? getMonthlyCloseAdjustmentImpact("technical")
           : getMonthlyCloseAdjustmentImpact(account.adjustmentKind);
         // El importe se guarda en positivo; el signo real permanece en el
@@ -954,6 +1080,7 @@ export async function closeMonth(
           data: {
             date: closeDate,
             amount: Math.abs(account.difference),
+            balanceDelta: account.difference,
             type: "balance_adjustment",
             description: `Ajuste cierre ${String(month).padStart(2, "0")}/${year}: ${getAdjustmentKindLabel(
               account.adjustmentKind
@@ -967,14 +1094,7 @@ export async function closeMonth(
           }
         });
 
-        await tx.account.update({
-          where: { id: account.id },
-          data: {
-            currentBalance: {
-              increment: account.difference
-            }
-          }
-        });
+        await adjustAccountBalance(tx, account.id, account.difference);
 
         const snapshot = accountSnapshots.find(
           (item) => item.accountId === account.id
@@ -1057,11 +1177,28 @@ export async function closeMonth(
         savingsAllocations,
         manualCloseResult.monthlySavings
       );
+      const deficitFunding = getDeficitFunding(
+        manualCloseResult.deficit,
+        calculateAvailableMoney(closedAccounts),
+        manualSavingsBuckets.reduce(
+          (sum, bucket) =>
+            sum +
+            toMoneyNumber(bucket.currentAmount) -
+            (changesAfter.buckets.get(bucket.id) ?? 0),
+          0
+        )
+      );
       validateNegativeBucketReductions(
         savingsReductions,
-        manualCloseResult.monthlySavings,
+        -deficitFunding.fromBuckets,
         manualSavingsBuckets.map((bucket) => ({
-          currentAmount: bucket.currentAmount,
+          currentAmount: Math.min(
+            toMoneyNumber(bucket.currentAmount),
+            normalizeMoney(
+              toMoneyNumber(bucket.currentAmount) -
+                (changesAfter.buckets.get(bucket.id) ?? 0)
+            )
+          ),
           id: bucket.id
         }))
       );
@@ -1075,14 +1212,7 @@ export async function closeMonth(
 
         // Repartir ahorro solo lo etiqueta mentalmente en una partida:
         // no mueve dinero bancario ni altera de nuevo el ahorro del mes.
-        await tx.savingsBucket.update({
-          where: { id: allocation.bucketId },
-          data: {
-            currentAmount: {
-              increment: allocation.amount
-            }
-          }
-        });
+        await adjustBucketBalance(tx, allocation.bucketId, allocation.amount);
 
         const transaction = await tx.transaction.create({
           data: {
@@ -1111,14 +1241,7 @@ export async function closeMonth(
 
         // Cubrir un déficit reduce ahorro ya asignado: no crea gasto ni
         // ingreso adicional y no mueve saldos bancarios reales.
-        await tx.savingsBucket.update({
-          where: { id: reduction.bucketId },
-          data: {
-            currentAmount: {
-              decrement: reduction.amount
-            }
-          }
-        });
+        await adjustBucketBalance(tx, reduction.bucketId, -reduction.amount);
 
         const transaction = await tx.transaction.create({
           data: {
@@ -1150,17 +1273,7 @@ export async function closeMonth(
             isLongTerm: true
           }
         }),
-        tx.reimbursement.findMany({
-          select: {
-            id: true,
-            title: true,
-            personName: true,
-            expectedAmount: true,
-            paidAmount: true,
-            status: true,
-            dueDate: true
-          }
-        })
+        getReimbursementsAt(tx, monthRange.end)
       ]);
       const finalAccounts = closedAccounts.map((account) => ({
         currentBalance: account.realBalance,
@@ -1183,6 +1296,7 @@ export async function closeMonth(
           availableMoney,
           netWorth,
           longTermAssets,
+          deficitFromFreeSavings: deficitFunding.fromFreeSavings,
           notes,
           closedAt: new Date()
         }
@@ -1216,7 +1330,12 @@ export async function closeMonth(
 
       const bucketSnapshots = createMonthlyBucketSnapshots(
         finalSavingsBuckets.map((bucket) => ({
-          amount: bucket.isLongTerm ? longTermAssets : bucket.currentAmount,
+          amount: bucket.isLongTerm
+            ? longTermAssets
+            : normalizeMoney(
+                toMoneyNumber(bucket.currentAmount) -
+                  (changesAfter.buckets.get(bucket.id) ?? 0)
+              ),
           id: bucket.id
         }))
       );
@@ -1249,7 +1368,10 @@ export async function closeMonth(
   }
 }
 
-export async function undoLatestMonthlyClose(formData: FormData): Promise<void> {
+export async function undoLatestMonthlyClose(
+  formData: FormData
+): Promise<void> {
+  await requireCurrentUser();
   const closeId = parseRequiredString(formData.get("closeId"));
   const returnTo = parseUndoReturnTo(formData.get("returnTo"));
 
@@ -1288,6 +1410,32 @@ export async function undoLatestMonthlyClose(formData: FormData): Promise<void> 
       throw new Error("Solo se puede deshacer el último cierre mensual.");
     }
 
+    const bucketDeltas = new Map<string, number>();
+    for (const transaction of close.generatedTransactions) {
+      if (!transaction.savingsBucketId) continue;
+      const delta =
+        transaction.type === "savings_allocation"
+          ? -toMoneyNumber(transaction.amount)
+          : transaction.type === "savings_withdrawal"
+            ? toMoneyNumber(transaction.amount)
+            : 0;
+      bucketDeltas.set(
+        transaction.savingsBucketId,
+        normalizeMoney(
+          (bucketDeltas.get(transaction.savingsBucketId) ?? 0) + delta
+        )
+      );
+    }
+    for (const [id, delta] of bucketDeltas) {
+      const bucket = await tx.savingsBucket.findUniqueOrThrow({
+        where: { id }
+      });
+      if (normalizeMoney(toMoneyNumber(bucket.currentAmount) + delta) < 0)
+        throw new Error(
+          `Devuelve primero el dinero utilizado de la partida ${bucket.name} para reabrir este cierre.`
+        );
+    }
+
     for (const snapshot of close.accountSnapshots) {
       const difference = toMoneyNumber(snapshot.difference);
 
@@ -1295,14 +1443,7 @@ export async function undoLatestMonthlyClose(formData: FormData): Promise<void> 
         continue;
       }
 
-      await tx.account.update({
-        where: { id: snapshot.accountId },
-        data: {
-          currentBalance: {
-            decrement: difference
-          }
-        }
-      });
+      await adjustAccountBalance(tx, snapshot.accountId, -difference);
     }
 
     for (const transaction of close.generatedTransactions) {
@@ -1313,25 +1454,11 @@ export async function undoLatestMonthlyClose(formData: FormData): Promise<void> 
       const amount = toMoneyNumber(transaction.amount);
 
       if (transaction.type === "savings_allocation") {
-        await tx.savingsBucket.update({
-          where: { id: transaction.savingsBucketId },
-          data: {
-            currentAmount: {
-              decrement: amount
-            }
-          }
-        });
+        await adjustBucketBalance(tx, transaction.savingsBucketId, -amount);
       }
 
       if (transaction.type === "savings_withdrawal") {
-        await tx.savingsBucket.update({
-          where: { id: transaction.savingsBucketId },
-          data: {
-            currentAmount: {
-              increment: amount
-            }
-          }
-        });
+        await adjustBucketBalance(tx, transaction.savingsBucketId, amount);
       }
     }
 
@@ -1388,6 +1515,15 @@ async function getEditableTransaction(
     throw new Error("El movimiento no existe.");
   }
 
+  await assertPeriodOpen(tx, transaction.date);
+
+  if (transaction.savingsTransferId)
+    throw new Error(
+      "Esta transferencia se gestiona como una operación completa desde partidas."
+    );
+  if (transaction.type === "expense" && !transaction.affectsRealBalance)
+    throw new Error("Gestiona este gasto convertido desde reembolsos.");
+
   if (transaction.monthlyCloseId) {
     throw new Error("No se puede editar un movimiento incluido en un cierre.");
   }
@@ -1397,11 +1533,17 @@ async function getEditableTransaction(
   }
 
   if (transaction.recurringOccurrence && !options.allowConfirmedRecurring) {
-    throw new Error("Gestiona los movimientos fijos desde su pantalla específica.");
+    throw new Error(
+      "Gestiona los movimientos fijos desde su pantalla específica."
+    );
   }
 
-  if (!EDITABLE_TRANSACTION_TYPES.has(transaction.type as QuickTransactionType)) {
-    throw new Error("Este tipo de movimiento no se puede editar desde recientes.");
+  if (
+    !EDITABLE_TRANSACTION_TYPES.has(transaction.type as QuickTransactionType)
+  ) {
+    throw new Error(
+      "Este tipo de movimiento no se puede editar desde recientes."
+    );
   }
 
   return transaction;
@@ -1413,38 +1555,29 @@ async function reverseEditableTransaction(
 ): Promise<void> {
   const amount = toMoneyNumber(transaction.amount);
 
-  if (transaction.type === "expense") {
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { currentBalance: { increment: amount } }
-    });
+  if (transaction.type === "expense" && transaction.affectsRealBalance) {
+    await adjustAccountBalance(tx, transaction.accountId, amount);
     return;
   }
 
-  if (transaction.type === "income") {
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { currentBalance: { decrement: amount } }
-    });
+  if (transaction.type === "income" && transaction.affectsRealBalance) {
+    await adjustAccountBalance(tx, transaction.accountId, -amount);
     return;
   }
 
-  if (transaction.type === "transfer") {
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { currentBalance: { increment: amount } }
-    });
+  if (transaction.type === "transfer" && transaction.affectsRealBalance) {
+    await adjustAccountBalance(tx, transaction.accountId, amount);
 
     if (transaction.destinationAccountId) {
-      await tx.account.update({
-        where: { id: transaction.destinationAccountId },
-        data: { currentBalance: { decrement: amount } }
-      });
+      await adjustAccountBalance(tx, transaction.destinationAccountId, -amount);
     }
     return;
   }
 
-  if (transaction.type === "savings_allocation" && transaction.savingsBucketId) {
+  if (
+    transaction.type === "savings_allocation" &&
+    transaction.savingsBucketId
+  ) {
     const bucket = await tx.savingsBucket.findUnique({
       where: { id: transaction.savingsBucketId },
       select: { currentAmount: true }
@@ -1454,10 +1587,7 @@ async function reverseEditableTransaction(
       throw new Error("No hay saldo suficiente en la partida para revertirlo.");
     }
 
-    await tx.savingsBucket.update({
-      where: { id: transaction.savingsBucketId },
-      data: { currentAmount: { decrement: amount } }
-    });
+    await adjustBucketBalance(tx, transaction.savingsBucketId, -amount);
   }
 }
 
@@ -1588,11 +1718,15 @@ function validateAdjustmentDirection(
   difference: number
 ): void {
   if (kind === "expense" && difference > 0) {
-    throw new Error("Un ajuste de gasto real debe reducir el saldo de la cuenta.");
+    throw new Error(
+      "Un ajuste de gasto real debe reducir el saldo de la cuenta."
+    );
   }
 
   if (kind === "income" && difference < 0) {
-    throw new Error("Un ajuste de ingreso real debe aumentar el saldo de la cuenta.");
+    throw new Error(
+      "Un ajuste de ingreso real debe aumentar el saldo de la cuenta."
+    );
   }
 }
 
@@ -1600,7 +1734,9 @@ function roundMoney(value: number): number {
   return normalizeMoney(value);
 }
 
-function parseTransactionType(value: FormDataEntryValue | null): QuickTransactionType {
+function parseTransactionType(
+  value: FormDataEntryValue | null
+): QuickTransactionType {
   if (
     typeof value !== "string" ||
     !VALID_QUICK_TRANSACTION_TYPES.has(value as QuickTransactionType)
@@ -1617,7 +1753,9 @@ function parseEditableTransactionType(
   const type = parseTransactionType(value);
 
   if (!EDITABLE_TRANSACTION_TYPES.has(type)) {
-    throw new Error("Este tipo de movimiento no se puede editar desde recientes.");
+    throw new Error(
+      "Este tipo de movimiento no se puede editar desde recientes."
+    );
   }
 
   return type;
@@ -1645,9 +1783,7 @@ function normalizeWeeklyBudgetImpactScope(
   scope: WeeklyBudgetImpactScope
 ): WeeklyBudgetImpactScope {
   if (type === "income") {
-    return scope === "include_weekly_and_monthly_income"
-      ? scope
-      : "normal";
+    return scope === "include_weekly_and_monthly_income" ? scope : "normal";
   }
 
   if (type === "expense") {
@@ -1841,14 +1977,7 @@ async function applyBalanceDeltas(
   balanceDeltas: Array<{ accountId: string; delta: number }>
 ): Promise<void> {
   for (const balanceDelta of balanceDeltas) {
-    await tx.account.update({
-      where: { id: balanceDelta.accountId },
-      data: {
-        currentBalance: {
-          increment: balanceDelta.delta
-        }
-      }
-    });
+    await adjustAccountBalance(tx, balanceDelta.accountId, balanceDelta.delta);
   }
 }
 
@@ -1874,6 +2003,8 @@ function revalidateAccountViews(): void {
 function revalidateSavingsViews(): void {
   revalidatePath("/");
   revalidatePath("/savings");
+  revalidatePath("/savings/[bucketId]", "page");
+  revalidatePath("/monthly-close");
 }
 
 function revalidateMonthlyCloseViews(): void {

@@ -1,3 +1,5 @@
+import { adjustAccountBalance, adjustBucketBalance } from "@/lib/balances";
+import { assertPeriodOpen, isPeriodClosed } from "./closed-periods";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import {
@@ -27,141 +29,176 @@ export async function getActiveRecurringTransactions() {
 
 export async function generateRecurringOccurrencesForMonth(
   year: number,
-  month: number
-): Promise<void> {
+  month: number,
+  now: Date = new Date()
+): Promise<string[]> {
+  if (await isPeriodClosed(prisma, year, month)) return [];
+  const errors: string[] = [];
   const templates = await prisma.recurringTransaction.findMany({
-    where: { isActive: true },
-    orderBy: [
-      { frequency: "asc" },
-      { dayOfMonth: "asc" },
-      { dayOfWeek: "asc" },
-      { createdAt: "asc" }
-    ]
+    where: { isActive: true }
   });
-
-  for (const template of templates) {
-    const scheduledDates = getScheduledDatesForMonth(template, year, month);
-    const monthlyDateCoveredByShiftedConfirmation =
-      template.frequency === "monthly" && scheduledDates.length === 1
-        ? await reconcileShiftedMonthlyConfirmation(
-            template.id,
-            year,
-            month,
-            scheduledDates[0]
-          )
-        : false;
-
-    for (const scheduledDate of scheduledDates) {
-      if (monthlyDateCoveredByShiftedConfirmation) {
-        continue;
-      }
-
-      try {
-        await prisma.$transaction(async (tx) => {
-          const scheduledDayRange = getCalendarDayRange(scheduledDate);
-          const existing =
-            await tx.recurringTransactionOccurrence.findFirst({
-              where: {
-                recurringTransactionId: template.id,
-                scheduledDate: {
-                  gte: scheduledDayRange.start,
-                  lt: scheduledDayRange.end
-                }
-              },
-              select: { id: true }
+  for (const candidate of templates) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (await isPeriodClosed(tx, year, month)) return;
+        const template = await tx.recurringTransaction.findUnique({
+          where: { id: candidate.id }
+        });
+        if (!template?.isActive) return;
+        await assertRecurringRelations(tx, template);
+        const dates = getScheduledDatesForMonth(template, year, month);
+        const occurrences = await tx.recurringTransactionOccurrence.findMany({
+          where: { recurringTransactionId: template.id, year, month }
+        });
+        // A processed monthly occurrence remains the authoritative payment for that month,
+        // even if the template's day has subsequently changed.
+        const processedMonthly =
+          template.frequency === "monthly" &&
+          occurrences.some((o) => o.status !== "pending");
+        for (const occurrence of occurrences.filter(
+          (o) => o.status === "pending"
+        )) {
+          const matchesSchedule = dates.some((date) =>
+            sameDay(date, occurrence.scheduledDate)
+          );
+          if (processedMonthly || !matchesSchedule) {
+            await tx.recurringTransactionOccurrence.delete({
+              where: { id: occurrence.id }
             });
-
-          if (existing) {
-            return;
           }
-
-          const occurrence = await tx.recurringTransactionOccurrence.create({
-            data: {
-              recurringTransactionId: template.id,
-              year,
-              month,
-              scheduledDate,
-              amount: template.amount
-            },
-            select: { id: true }
-          });
-
-          await tx.recurringTransaction.update({
-            where: { id: template.id },
-            data: {
-              lastGeneratedMonth: `${year}-${String(month).padStart(2, "0")}`
+        }
+        if (!processedMonthly)
+          for (const scheduledDate of dates) {
+            const existing = occurrences.find((o) =>
+              sameDay(o.scheduledDate, scheduledDate)
+            );
+            if (existing && existing.status !== "pending") continue;
+            const occurrence = existing
+              ? await tx.recurringTransactionOccurrence.update({
+                  where: { id: existing.id },
+                  data: { amount: template.amount }
+                })
+              : await tx.recurringTransactionOccurrence.create({
+                  data: {
+                    recurringTransactionId: template.id,
+                    year,
+                    month,
+                    scheduledDate,
+                    amount: template.amount
+                  }
+                });
+            if (
+              template.autoCreateMode === "automatic" &&
+              scheduledDate < getCalendarDayRange(now).end
+            ) {
+              await confirmRecurringOccurrenceInTransaction(tx, occurrence.id);
             }
-          });
-
-          if (template.autoCreateMode === "automatic") {
-            await confirmRecurringOccurrenceInTransaction(tx, occurrence.id);
+          }
+        await tx.recurringTransaction.update({
+          where: { id: template.id },
+          data: {
+            lastGeneratedMonth: `${year}-${String(month).padStart(2, "0")}`
           }
         });
-      } catch (error) {
-        // La restricción única evita duplicados si dos cargas generan la misma
-        // fecha recurrente a la vez.
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === "P2002"
-        ) {
-          continue;
-        }
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        ["P2002", "P2034"].includes(error.code)
+      )
+        continue;
+      const message = `${candidate.name}: ${error instanceof Error ? error.message : "No se pudo generar el movimiento."}`;
+      errors.push(message);
+      console.error(message);
+    }
+  }
+  return errors;
+}
 
-        throw error;
-      }
+function sameDay(a: Date, b: Date): boolean {
+  const range = getCalendarDayRange(a);
+  return b >= range.start && b < range.end;
+}
+
+/** Reconcile pending dates immediately after editing a template, preserving processed history. */
+export async function reconcilePendingOccurrences(
+  tx: Prisma.TransactionClient,
+  recurringTransactionId: string
+) {
+  const template = await tx.recurringTransaction.findUniqueOrThrow({
+    where: { id: recurringTransactionId }
+  });
+  const pending = await tx.recurringTransactionOccurrence.findMany({
+    where: { recurringTransactionId, status: "pending" }
+  });
+  const periods = new Map(pending.map((o) => [`${o.year}-${o.month}`, o]));
+  for (const { year, month } of periods.values()) {
+    if (await isPeriodClosed(tx, year, month)) continue;
+    const dates = getScheduledDatesForMonth(template, year, month);
+    const processed = await tx.recurringTransactionOccurrence.findMany({
+      where: { recurringTransactionId, year, month, status: { not: "pending" } }
+    });
+    await tx.recurringTransactionOccurrence.deleteMany({
+      where: { recurringTransactionId, year, month, status: "pending" }
+    });
+    if (
+      !template.isActive ||
+      (template.frequency === "monthly" && processed.length > 0)
+    )
+      continue;
+    for (const scheduledDate of dates) {
+      if (processed.some((o) => sameDay(o.scheduledDate, scheduledDate)))
+        continue;
+      await tx.recurringTransactionOccurrence.create({
+        data: {
+          recurringTransactionId,
+          year,
+          month,
+          scheduledDate,
+          amount: template.amount
+        }
+      });
     }
   }
 }
 
-async function reconcileShiftedMonthlyConfirmation(
-  recurringTransactionId: string,
-  year: number,
-  month: number,
-  expectedScheduledDate: Date
-): Promise<boolean> {
-  const expectedDayRange = getCalendarDayRange(expectedScheduledDate);
-
-  return prisma.$transaction(async (tx) => {
-    const shiftedConfirmedOccurrence =
-      await tx.recurringTransactionOccurrence.findFirst({
-        where: {
-          recurringTransactionId,
-          year,
-          month,
-          status: "confirmed",
-          generatedTransactionId: { not: null },
-          NOT: {
-            scheduledDate: {
-              gte: expectedDayRange.start,
-              lt: expectedDayRange.end
-            }
-          }
-        },
-        select: { id: true }
-      });
-
-    if (!shiftedConfirmedOccurrence) {
-      return false;
-    }
-
-    await tx.recurringTransactionOccurrence.updateMany({
-      where: {
-        recurringTransactionId,
-        year,
-        month,
-        status: "pending",
-        scheduledDate: {
-          gte: expectedDayRange.start,
-          lt: expectedDayRange.end
-        }
-      },
-      data: {
-        status: "skipped"
-      }
-    });
-
-    return true;
+export async function processDueRecurringTransactions(
+  now = new Date()
+): Promise<void> {
+  const templates = await prisma.recurringTransaction.findMany({
+    where: { isActive: true },
+    select: { startDate: true, createdAt: true, lastGeneratedMonth: true }
   });
+  let first = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+  for (const template of templates) {
+    const start = template.lastGeneratedMonth
+      ? new Date(`${template.lastGeneratedMonth}-01T12:00:00`)
+      : new Date(
+          Math.max(template.startDate.getTime(), template.createdAt.getTime())
+        );
+    if (start < first)
+      first = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+  }
+  const overdue = await prisma.recurringTransactionOccurrence.findFirst({
+    where: {
+      status: "pending",
+      recurringTransaction: { isActive: true, autoCreateMode: "automatic" }
+    },
+    orderBy: { scheduledDate: "asc" }
+  });
+  if (overdue && overdue.scheduledDate < first)
+    first = new Date(overdue.year, overdue.month - 1, 1, 12);
+  for (
+    const date = first;
+    date < getCalendarDayRange(now).end;
+    date.setMonth(date.getMonth() + 1)
+  ) {
+    await generateRecurringOccurrencesForMonth(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      now
+    );
+  }
 }
 
 export async function confirmRecurringOccurrence(
@@ -176,14 +213,16 @@ export async function confirmRecurringOccurrence(
 export async function skipRecurringOccurrence(
   occurrenceId: string
 ): Promise<void> {
-  await prisma.recurringTransactionOccurrence.update({
-    where: {
-      id: occurrenceId,
-      status: "pending"
-    },
-    data: {
-      status: "skipped"
-    }
+  await prisma.$transaction(async (tx) => {
+    const occurrence =
+      await tx.recurringTransactionOccurrence.findUniqueOrThrow({
+        where: { id: occurrenceId }
+      });
+    await assertPeriodOpen(tx, occurrence.scheduledDate);
+    await tx.recurringTransactionOccurrence.update({
+      where: { id: occurrenceId, status: "pending" },
+      data: { status: "skipped" }
+    });
   });
 }
 
@@ -192,8 +231,8 @@ export async function confirmAllRecurringOccurrences(
   month: number
 ): Promise<number> {
   return prisma.$transaction(async (tx) => {
-    const pendingOccurrences =
-      await tx.recurringTransactionOccurrence.findMany({
+    const pendingOccurrences = await tx.recurringTransactionOccurrence.findMany(
+      {
         where: {
           year,
           month,
@@ -201,7 +240,8 @@ export async function confirmAllRecurringOccurrences(
         },
         orderBy: [{ scheduledDate: "asc" }, { createdAt: "asc" }],
         select: { id: true }
-      });
+      }
+    );
 
     for (const occurrence of pendingOccurrences) {
       await confirmRecurringOccurrenceInTransaction(tx, occurrence.id);
@@ -234,6 +274,10 @@ async function confirmRecurringOccurrenceInTransaction(
   const template = occurrence.recurringTransaction;
   const amount = changes?.amount ?? toMoneyNumber(occurrence.amount);
   const date = changes?.date ?? occurrence.scheduledDate;
+  await assertPeriodOpen(tx, occurrence.scheduledDate);
+  await assertPeriodOpen(tx, date);
+  if (!template.isActive)
+    throw new Error("Activa la plantilla antes de confirmar sus pendientes.");
   const rules = getRecurringTransactionRules({
     type: template.type,
     amount,
@@ -263,25 +307,15 @@ async function confirmRecurringOccurrenceInTransaction(
   });
 
   for (const balanceDelta of rules.balanceDeltas) {
-    await tx.account.update({
-      where: { id: balanceDelta.accountId },
-      data: {
-        currentBalance: {
-          increment: balanceDelta.delta
-        }
-      }
-    });
+    await adjustAccountBalance(tx, balanceDelta.accountId, balanceDelta.delta);
   }
 
   if (rules.savingsBucketDelta > 0 && template.savingsBucketId) {
-    await tx.savingsBucket.update({
-      where: { id: template.savingsBucketId },
-      data: {
-        currentAmount: {
-          increment: rules.savingsBucketDelta
-        }
-      }
-    });
+    await adjustBucketBalance(
+      tx,
+      template.savingsBucketId,
+      rules.savingsBucketDelta
+    );
   }
 
   await tx.recurringTransactionOccurrence.update({
@@ -315,7 +349,9 @@ async function assertRecurringRelations(
 
   if (template.type === "transfer") {
     if (!template.destinationAccountId) {
-      throw new Error("La transferencia recurrente no tiene cuenta de destino.");
+      throw new Error(
+        "La transferencia recurrente no tiene cuenta de destino."
+      );
     }
 
     const destination = await tx.account.findUnique({

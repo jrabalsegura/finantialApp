@@ -1,3 +1,4 @@
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
 import { RecurringTransactionFields } from "../components/RecurringTransactionFields";
@@ -62,12 +63,22 @@ const recurringTypeGroups: Array<{
   }
 ];
 
-export default async function RecurringPage() {
+export default async function RecurringPage({
+  searchParams
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
+  await requireCurrentUser();
   const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth() + 1;
+  const { period } = await searchParams;
+  const validPeriod = period && /^(20\d{2}|2100)-(0[1-9]|1[0-2])$/.test(period);
+  const year = validPeriod ? Number(period.slice(0, 4)) : today.getFullYear();
+  const month = validPeriod ? Number(period.slice(5)) : today.getMonth() + 1;
 
-  await generateRecurringOccurrencesForMonth(year, month);
+  const generationErrors = await generateRecurringOccurrencesForMonth(
+    year,
+    month
+  );
 
   const [accounts, categories, savingsBuckets, templates, occurrences] =
     await Promise.all([
@@ -161,11 +172,30 @@ export default async function RecurringPage() {
           </div>
         </header>
 
+        <form method="GET" className="flex items-end gap-3">
+          <label className="field-label">
+            Mes
+            <input
+              className="field-input"
+              type="month"
+              name="period"
+              defaultValue={`${year}-${String(month).padStart(2, "0")}`}
+            />
+          </label>
+          <button className="primary-button" type="submit">
+            Ver mes
+          </button>
+        </form>
+        {generationErrors.map((message) => (
+          <p key={message} role="alert" className="text-rose-800">
+            {message}
+          </p>
+        ))}
         <section className="rounded-lg border border-line bg-white shadow-sm">
           <div className="grid gap-3 border-b border-line px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
             <div>
               <h2 className="text-lg font-semibold text-ink">
-                Pendientes de este mes
+                Movimientos del mes seleccionado
               </h2>
               <p className="mt-1 text-sm text-muted">
                 {pendingOccurrences.length} por revisar
@@ -359,8 +389,9 @@ export default async function RecurringPage() {
                         const nextDate = template.isActive
                           ? getNextScheduledDate(template, today)
                           : null;
-                        const occurrenceSummary =
-                          summarizeOccurrenceStatuses(template.occurrences);
+                        const occurrenceSummary = summarizeOccurrenceStatuses(
+                          template.occurrences
+                        );
 
                         return (
                           <li
@@ -380,9 +411,7 @@ export default async function RecurringPage() {
                                         : "bg-surface text-muted"
                                     }`}
                                   >
-                                    {template.isActive
-                                      ? "Activa"
-                                      : "Inactiva"}
+                                    {template.isActive ? "Activa" : "Inactiva"}
                                   </span>
                                   <span className="rounded-full bg-surface px-2 py-1 text-xs font-medium text-muted">
                                     {template.autoCreateMode === "pending"
@@ -428,9 +457,7 @@ export default async function RecurringPage() {
                                   className="nav-link w-full"
                                   type="submit"
                                 >
-                                  {template.isActive
-                                    ? "Desactivar"
-                                    : "Activar"}
+                                  {template.isActive ? "Desactivar" : "Activar"}
                                 </button>
                               </form>
                             </div>
@@ -515,7 +542,10 @@ export default async function RecurringPage() {
             Crear movimiento fijo
           </h2>
           {accounts.length > 0 ? (
-            <form action={createRecurringTransaction} className="mt-4 grid gap-4">
+            <form
+              action={createRecurringTransaction}
+              className="mt-4 grid gap-4"
+            >
               <RecurringTransactionFields
                 {...formOptions}
                 template={{
