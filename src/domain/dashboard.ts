@@ -33,6 +33,8 @@ export type PendingRecurringOccurrenceForDashboard = {
   amount: MoneyValue;
   status: string;
   recurringTransaction: {
+    account?: { includeInMonthlySavings: boolean };
+    isActive?: boolean;
     type: Extract<
       TransactionType,
       "expense" | "income" | "transfer" | "savings_allocation"
@@ -126,17 +128,20 @@ export function calculateDashboardNetWorthVariation(
 export function calculateProjectedMonthlyCashflow({
   actualExpense,
   actualIncome,
+  actualSavings,
   recurringOccurrences
 }: {
+  actualSavings?: MoneyValue;
   actualExpense: MoneyValue;
   actualIncome: MoneyValue;
   recurringOccurrences: PendingRecurringOccurrenceForDashboard[];
 }): ProjectedMonthlyCashflow {
   let income = toMoneyNumber(actualIncome);
   let expense = toMoneyNumber(actualExpense);
+  let savings = actualSavings === undefined ? income - expense : toMoneyNumber(actualSavings);
 
   for (const occurrence of recurringOccurrences) {
-    if (occurrence.status !== "pending") {
+    if (occurrence.status !== "pending" || occurrence.recurringTransaction.isActive === false) {
       continue;
     }
 
@@ -144,6 +149,8 @@ export function calculateProjectedMonthlyCashflow({
       occurrence.recurringTransaction.type
     );
     const amount = toMoneyNumber(occurrence.amount);
+
+    if (occurrence.recurringTransaction.account?.includeInMonthlySavings !== false) savings += impact.affectsPersonalIncome ? amount : impact.affectsPersonalExpense ? -amount : 0;
 
     if (impact.affectsPersonalIncome) {
       income += amount;
@@ -157,7 +164,7 @@ export function calculateProjectedMonthlyCashflow({
   return {
     expense: toMoneyNumber(expense),
     income: toMoneyNumber(income),
-    savings: toMoneyNumber(income - expense)
+    savings: toMoneyNumber(savings)
   };
 }
 

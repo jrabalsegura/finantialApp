@@ -1,9 +1,11 @@
+import { getCurrentUser } from "@/lib/auth";
 import { validateBackup } from "@/domain/backup";
 import { importBackup } from "@/lib/backup";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!(await getCurrentUser())) return Response.json({ error: "Inicia sesión para continuar." }, { status: 401 });
   try {
     const input: unknown = await request.json();
     const validation = validateBackup(input);

@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { WeeklyBudgetCard } from "../components/WeeklyBudgetCard";
 import {
@@ -9,6 +11,7 @@ import { getWeeklyBudgetReport } from "@/lib/weekly-budget";
 export const dynamic = "force-dynamic";
 
 export default async function WeeklyBudgetPage() {
+  await requireCurrentUser();
   const report = await getWeeklyBudgetReport();
   const { setting, status } = report;
 
@@ -30,7 +33,7 @@ export default async function WeeklyBudgetPage() {
           </div>
         </header>
 
-        <WeeklyBudgetCard status={status} />
+        <WeeklyBudgetCard status={status} weeklySpendingCap={report.setting.weeklySpendingCap} />
 
         {!status.hasSufficientConfiguration ? (
           <section className="rounded-lg border border-amber-300 bg-amber-50 p-5 text-amber-950">

@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import type { CategoryType } from "@prisma/client";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
@@ -32,6 +34,7 @@ export default async function CategoriesPage({
     type?: string;
   }>;
 }) {
+  await requireCurrentUser();
   const query = await searchParams;
   const today = new Date();
   const selectedPeriod = parsePeriod(query.period, today);

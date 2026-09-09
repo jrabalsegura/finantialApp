@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMonthDateRange, toMoneyNumber } from "@/domain/financial-calculations";
@@ -25,6 +27,7 @@ export default async function CategoryMonthPage({
     year?: string;
   }>;
 }) {
+  await requireCurrentUser();
   const [{ categoryId }, query] = await Promise.all([params, searchParams]);
   const today = new Date();
   const year = parseYear(query.year, today.getFullYear());

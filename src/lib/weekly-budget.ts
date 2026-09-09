@@ -1,9 +1,13 @@
 import {
   getIncludedRecurringOccurrenceCount,
+  getRecurringBudgetAmount,
   getWeeklyBudgetStatus,
   type WeeklyBudgetCalculationMode
 } from "@/domain/weekly-budget";
-import { getMonthDateRange, toMoneyNumber } from "@/domain/financial-calculations";
+import {
+  getMonthDateRange,
+  toMoneyNumber
+} from "@/domain/financial-calculations";
 import { prisma } from "./prisma";
 
 export const DEFAULT_BUDGET_SETTING_ID = "default";
@@ -35,7 +39,21 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
   const [setting, recurringTransactions, transactions] = await Promise.all([
     getOrCreateBudgetSetting(),
     prisma.recurringTransaction.findMany({
-      where: { isActive: true },
+      where: {
+        OR: [
+          { isActive: true },
+          {
+            occurrences: {
+              some: {
+                status: "confirmed",
+                generatedTransaction: {
+                  date: { gte: monthRange.start, lt: monthRange.end }
+                }
+              }
+            }
+          }
+        ]
+      },
       orderBy: [{ type: "asc" }, { dayOfMonth: "asc" }, { name: "asc" }],
       select: {
         id: true,
@@ -55,8 +73,19 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
           select: { name: true }
         },
         occurrences: {
-          where: { year, month },
+          where: {
+            OR: [
+              { year, month },
+              {
+                generatedTransaction: {
+                  date: { gte: monthRange.start, lt: monthRange.end }
+                }
+              }
+            ]
+          },
           select: {
+            amount: true,
+            generatedTransaction: { select: { date: true, amount: true } },
             scheduledDate: true,
             status: true
           }
@@ -148,6 +177,7 @@ export async function getWeeklyBudgetReport(referenceDate: Date = new Date()) {
   return {
     setting: {
       ...setting,
+      weeklySpendingCap: toMoneyNumber(setting.weeklySpendingCap),
       monthlyMinimumSavingsTarget: toMoneyNumber(
         setting.monthlyMinimumSavingsTarget
       )
@@ -226,9 +256,15 @@ function toFixedItem(
     dayOfWeek: number;
     startDate: Date;
     endDate: Date | null;
+    isActive: boolean;
     account: { name: string };
     category: { name: string } | null;
     occurrences: Array<{
+      amount: Parameters<typeof toMoneyNumber>[0];
+      generatedTransaction: {
+        date: Date;
+        amount: Parameters<typeof toMoneyNumber>[0];
+      } | null;
       scheduledDate: Date;
       status: "pending" | "confirmed" | "skipped";
     }>;
@@ -245,7 +281,10 @@ function toFixedItem(
   return {
     id: transaction.id,
     name: transaction.name,
-    amount: amountPerOccurrence * occurrenceCount,
+    amount: getRecurringBudgetAmount(
+      transaction,
+      new Date(year, month - 1, 1, 12)
+    ),
     amountPerOccurrence,
     frequency: transaction.frequency,
     dayOfMonth: transaction.dayOfMonth,

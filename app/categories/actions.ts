@@ -1,4 +1,5 @@
 "use server";
+import { requireCurrentUser } from "@/lib/auth";
 
 import { revalidatePath } from "next/cache";
 import type { CategoryType } from "@prisma/client";
@@ -11,6 +12,7 @@ const VALID_CATEGORY_TYPES = new Set<CategoryType>([
 ]);
 
 export async function createCategory(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const input = parseCategoryForm(formData);
 
   await prisma.category.create({
@@ -21,18 +23,50 @@ export async function createCategory(formData: FormData): Promise<void> {
 }
 
 export async function updateCategory(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const input = parseCategoryForm(formData);
 
-  await prisma.category.update({
-    where: { id },
-    data: input
+  await prisma.$transaction(async (tx) => {
+    if (input.type !== "both") {
+      const opposite = input.type === "expense" ? "income" : "expense";
+      const [recurring, templates, transactions] = await Promise.all([
+        tx.recurringTransaction.count({
+          where: { categoryId: id, type: opposite }
+        }),
+        tx.quickTransactionTemplate.count({
+          where: {
+            categoryId: id,
+            type: {
+              in:
+                opposite === "expense"
+                  ? ["expense", "reimbursable_expense"]
+                  : ["income"]
+            }
+          }
+        }),
+        tx.transaction.count({
+          where: {
+            categoryId: id,
+            ...(opposite === "expense"
+              ? { affectsPersonalExpense: true }
+              : { affectsPersonalIncome: true })
+          }
+        })
+      ]);
+      if (recurring + templates + transactions > 0)
+        throw new Error(
+          "Esta categoría tiene movimientos o plantillas incompatibles. Usa el tipo Ambos o reasigna sus referencias primero."
+        );
+    }
+    await tx.category.update({ where: { id }, data: input });
   });
 
   revalidateCategoryViews();
 }
 
 export async function deleteCategory(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
 
   const [transactions, recurringTransactions, quickTransactionTemplates] =

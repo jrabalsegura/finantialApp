@@ -46,6 +46,7 @@ export type AccountForLongTermBucketAdjustment = {
 };
 
 export type TransactionForCalculations = {
+  account?: { includeInMonthlySavings: boolean };
   date: Date | string;
   amount: MoneyValue;
   type: TransactionType;
@@ -249,9 +250,9 @@ export function getDefaultTransactionImpact(
 }
 
 export function transactionAffectsMonthlySavings(
-  transaction: Pick<TransactionForCalculations, "affectsMonthlySavings">
+  transaction: Pick<TransactionForCalculations, "affectsMonthlySavings" | "account">
 ): boolean {
-  return transaction.affectsMonthlySavings;
+  return transaction.affectsMonthlySavings && transaction.account?.includeInMonthlySavings !== false;
 }
 
 export function transactionAffectsNetWorth(
@@ -282,7 +283,7 @@ export function calculateUnassignedAvailableMoney(
   accounts: AccountForCalculations[],
   savingsBuckets: SavingsBucketForCalculations[]
 ): number {
-  return calculateAvailableMoney(accounts) - calculateAssignedSavings(savingsBuckets);
+  return roundMoney(calculateAvailableMoney(accounts) - calculateAssignedSavings(savingsBuckets));
 }
 
 export function accountFeedsLongTermBucket(
@@ -563,7 +564,7 @@ export function calculatePendingReimbursements(
     .map((reimbursement) => {
       const expectedAmount = toMoneyNumber(reimbursement.expectedAmount);
       const paidAmount = toMoneyNumber(reimbursement.paidAmount);
-      const pendingAmount = Math.max(expectedAmount - paidAmount, 0);
+      const pendingAmount = Math.max(roundMoney(expectedAmount - paidAmount), 0);
 
       return {
         id: reimbursement.id,
@@ -674,7 +675,7 @@ export function calculateRealMonthlySavings(
       .map((transaction) => transaction.amount)
   );
 
-  return income - expense;
+  return roundMoney(income - expense);
 }
 
 export function isTransactionInMonth(
@@ -721,9 +722,9 @@ function sumMonthlyTransactions(
 
 function sumMoney(values: MoneyValue[]): number {
   return values.reduce<number>(
-    (total, value) => total + toMoneyNumber(value),
+    (total, value) => total + Math.round(toMoneyNumber(value) * 100),
     0
-  );
+  ) / 100;
 }
 
 function sumBucketAdjustments(adjustments: BucketAdjustmentInput[]): number {
@@ -757,4 +758,12 @@ function isLongTermAccountType(type: string): type is LongTermAccountType {
 
 function roundMoney(value: number): number {
   return normalizeMoney(value);
+}
+
+/** The deficit has already reduced cash. Reconstruct the free reserve before that loss. */
+export function getDeficitFunding(deficit: MoneyValue, endingAvailableMoney: MoneyValue, assignedSavings: MoneyValue) {
+  const loss = Math.max(toMoneyNumber(deficit), 0);
+  const freeBeforeLoss = Math.max(roundMoney(toMoneyNumber(endingAvailableMoney) - toMoneyNumber(assignedSavings) + loss), 0);
+  const fromFreeSavings = Math.min(loss, freeBeforeLoss);
+  return { fromFreeSavings, fromBuckets: roundMoney(loss - fromFreeSavings) };
 }

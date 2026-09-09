@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import type { QuickTransactionTemplateType } from "@prisma/client";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
@@ -53,6 +55,7 @@ const quickTemplateGroups: Array<{
 ];
 
 export default async function QuickTemplatesPage() {
+  await requireCurrentUser();
   const [accounts, categories, savingsBuckets, templates] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],

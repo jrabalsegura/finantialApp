@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import {
   convertReimbursementToRealExpense,
   createReimbursableExpense,
@@ -15,6 +17,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function ReimbursementsPage() {
+  await requireCurrentUser();
   const [accounts, categories, reimbursements] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -58,7 +61,6 @@ export default async function ReimbursementsPage() {
   ]);
 
   const defaultAccount =
-    accounts.find((account) => account.name === "Openbank principal") ??
     accounts.find((account) => account.isDefault) ??
     accounts[0];
   const today = getTodayInputValue();

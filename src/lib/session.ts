@@ -21,6 +21,7 @@ export type SessionPayload = {
   exp: number;
   iat: number;
   userId: string;
+  sessionVersion: number;
 };
 
 const textEncoder = new TextEncoder();
@@ -28,14 +29,16 @@ const textEncoder = new TextEncoder();
 export async function createSessionToken(
   userId: string,
   durationSeconds = SESSION_DURATION_SECONDS,
-  issuedAt = Math.floor(Date.now() / 1000)
+  issuedAt = Math.floor(Date.now() / 1000),
+  sessionVersion = 0
 ): Promise<string> {
   const safeDurationSeconds = normalizeSessionDuration(durationSeconds);
   const payload: SessionPayload = {
     durationSeconds: safeDurationSeconds,
     exp: issuedAt + safeDurationSeconds,
     iat: issuedAt,
-    userId
+    userId,
+    sessionVersion
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = await sign(encodedPayload);
@@ -85,11 +88,11 @@ async function sign(value: string): Promise<string> {
 }
 
 function getSessionSecret(): string {
-  return (
-    process.env.AUTH_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
-    "development-only-change-before-publishing"
-  );
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret || secret.length < 32 || ["development-only-change-before-publishing", "replace-with-at-least-32-random-bytes", "change-me-before-publishing"].includes(secret)) {
+    throw new Error("Configura AUTH_SECRET con un secreto aleatorio de al menos 32 caracteres.");
+  }
+  return secret;
 }
 
 function isSessionPayload(payload: unknown): payload is SessionPayload {
@@ -99,6 +102,8 @@ function isSessionPayload(payload: unknown): payload is SessionPayload {
   return (
     typeof candidate.userId === "string" &&
     candidate.userId.length > 0 &&
+    Number.isSafeInteger(candidate.sessionVersion) &&
+    (candidate.sessionVersion as number) >= 0 &&
     typeof candidate.iat === "number" &&
     Number.isFinite(candidate.iat) &&
     typeof candidate.exp === "number" &&

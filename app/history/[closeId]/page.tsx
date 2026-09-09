@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { undoLatestMonthlyClose } from "../../actions";
@@ -21,6 +23,7 @@ export default async function MonthlyCloseDetailPage({
 }: {
   params: Promise<{ closeId: string }>;
 }) {
+  await requireCurrentUser();
   const { closeId } = await params;
   const close = await prisma.monthlyClose.findUnique({
     where: { id: closeId },
@@ -125,6 +128,7 @@ export default async function MonthlyCloseDetailPage({
           </section>
         ) : null}
 
+        {toMoneyNumber(close.deficitFromFreeSavings) > 0 ? <p className="text-sm text-muted">Déficit cubierto con ahorro libre: {currencyFormatter.format(toMoneyNumber(close.deficitFromFreeSavings))}.</p> : null}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Ingresos" value={toMoneyNumber(close.totalIncome)} />
           <Metric label="Gastos" value={toMoneyNumber(close.totalExpense)} />

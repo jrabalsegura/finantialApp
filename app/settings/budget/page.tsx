@@ -1,3 +1,4 @@
+import { requireCurrentUser } from "@/lib/auth";
 import { toMoneyNumber } from "@/domain/financial-calculations";
 import { formatPlainAmount } from "@/domain/money";
 import { getOrCreateBudgetSetting } from "@/lib/weekly-budget";
@@ -7,6 +8,7 @@ import { updateBudgetSetting } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function BudgetSettingsPage() {
+  await requireCurrentUser();
   const [setting, savingsBuckets] = await Promise.all([
     getOrCreateBudgetSetting(),
     prisma.savingsBucket.findMany({
@@ -38,6 +40,22 @@ export default async function BudgetSettingsPage() {
           className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-sm sm:p-6"
         >
           <div className="grid gap-4 sm:grid-cols-2">
+            <label className="field-label">
+              Límite de gasto semanal (€)
+              <input
+                className="field-input"
+                name="weeklySpendingCap"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                defaultValue={toMoneyNumber(setting.weeklySpendingCap)}
+              />
+              <span className="text-xs text-muted">
+                Si el presupuesto calculado es superior, la tarjeta mostrará
+                ambas cifras.
+              </span>
+            </label>
             <label className="field-label">
               Ahorro mínimo mensual
               <input
@@ -115,8 +133,7 @@ export default async function BudgetSettingsPage() {
                   Mes completo proporcional
                 </span>
                 <span className="mt-1 block text-xs leading-5 text-muted">
-                  Usa una cantidad diaria fija basada en todos los días del
-                  mes.
+                  Usa una cantidad diaria fija basada en todos los días del mes.
                 </span>
               </span>
             </label>
@@ -140,8 +157,8 @@ export default async function BudgetSettingsPage() {
               Incluir gastos reembolsables
             </label>
             <p className="text-xs leading-5 text-muted">
-              Por defecto ambos quedan fuera. Los movimientos pendientes solo
-              se aplicarán cuando exista ese estado en el registro de
+              Por defecto ambos quedan fuera. Los movimientos pendientes solo se
+              aplicarán cuando exista ese estado en el registro de
               transacciones.
             </p>
           </div>

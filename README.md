@@ -83,7 +83,7 @@ La app incluye autenticación básica para uso privado:
 
 ## Requisitos
 
-- Node.js 20 o superior.
+- Node.js 22.13 o superior (el contenedor usa 22.23.2).
 - npm o un gestor compatible.
 
 ## Puesta en marcha
@@ -107,8 +107,7 @@ La app incluye autenticación básica para uso privado:
    AUTH_SECRET="replace-with-at-least-32-random-bytes"
    ```
 
-   Cambia `AUTH_SECRET` por un valor largo y aleatorio antes de publicar la app
-   en una URL accesible desde internet.
+   Cambia `AUTH_SECRET` por un secreto aleatorio de al menos 32 caracteres antes de arrancar, también en desarrollo. Puedes generarlo con `openssl rand -hex 32`.
 
 3. Aplica la migración y genera Prisma Client:
 
@@ -143,9 +142,9 @@ La app incluye autenticación básica para uso privado:
 
 ## Scripts útiles
 
-- `npm run dev`: arranca Next.js en desarrollo.
+- `npm run dev`: arranca Next.js en desarrollo y el proceso de recurrentes.
 - `npm run build`: compila la app.
-- `npm test`: ejecuta los tests de cálculos financieros.
+- `npm test`: ejecuta las pruebas de dominio y de integración con una base SQLite temporal. No utiliza los datos configurados en `.env`.
 - `npm run typecheck`: comprueba TypeScript.
 - `npm run prisma:generate`: genera Prisma Client.
 - `npm run db:migrate`: aplica migraciones en desarrollo.
@@ -196,5 +195,11 @@ También crea categorías básicas de ingresos/gastos y las partidas de ahorro i
 ## Estado actual
 
 Las fases 1 a 8 del alcance definido en `docs/SPEC.md` están implementadas.
-Quedan fuera de este alcance el CRUD visual completo de categorías y la edición
-o eliminación de movimientos ya registrados.
+Incluye CRUD de categorías y edición/eliminación de movimientos desde recientes, con protección de cierres y operaciones vinculadas.
+
+Las reglas y las correcciones de la revisión de septiembre están documentadas en [docs/FIXES-2026-09-06.md](docs/FIXES-2026-09-06.md).
+
+
+Los arranques con `npm start`, `npm run dev` y el contenedor incluyen un proceso que revisa los recurrentes cada minuto. Solo confirma los automáticos cuya fecha local ha llegado; recupera meses pendientes después de una parada y conserva las ocurrencias procesadas. Usa `TZ=Europe/Madrid` para mantener la fecha de negocio.
+
+Al actualizar esta versión, aplica `npx prisma migrate deploy` y `npm run prisma:generate` antes de arrancar. El contenedor aplica las migraciones automáticamente. La actualización invalida las sesiones antiguas: vuelve a iniciar sesión. Las copias financieras v8 conservan los nuevos vínculos; se pueden importar v5, v6 y v7 si sus datos pasan la validación.

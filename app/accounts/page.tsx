@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
 import {
   createAccount,
@@ -16,6 +18,7 @@ import { currencyFormatter } from "@/lib/formatters";
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
+  await requireCurrentUser();
   const accounts = await prisma.account.findMany({
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     include: {
@@ -193,6 +196,7 @@ function AccountFields({
 
         <label className="field-label">
           Saldo actual
+          {account ? <input type="hidden" name="originalBalance" value={formatPlainAmount(account.currentBalance)} /> : null}
           <input
             className="field-input"
             defaultValue={formatPlainAmount(account?.currentBalance ?? 0)}
@@ -201,6 +205,7 @@ function AccountFields({
             step="0.01"
             type="number"
           />
+          {account ? <span className="text-xs text-muted">Cambiar este importe registra una corrección técnica de saldo.</span> : null}
         </label>
       </div>
 

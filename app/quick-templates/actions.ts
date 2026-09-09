@@ -1,4 +1,6 @@
 "use server";
+import { requireCurrentUser } from "@/lib/auth";
+
 
 import type { QuickTransactionTemplateType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -18,6 +20,7 @@ const VALID_TYPES = new Set<QuickTransactionTemplateType>(
 export async function createQuickTemplateAction(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   await createQuickTemplate(parseTemplateForm(formData));
   revalidateQuickTemplateViews();
 }
@@ -25,6 +28,7 @@ export async function createQuickTemplateAction(
 export async function updateQuickTemplateAction(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   await updateQuickTemplate(id, parseTemplateForm(formData));
   revalidateQuickTemplateViews();
@@ -33,6 +37,7 @@ export async function updateQuickTemplateAction(
 export async function toggleQuickTemplateActive(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const isActive = formData.get("isActive") === "true";
   await prisma.quickTransactionTemplate.update({
@@ -45,6 +50,7 @@ export async function toggleQuickTemplateActive(
 export async function toggleQuickTemplateFavorite(
   formData: FormData
 ): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const isFavorite = formData.get("isFavorite") === "true";
   await prisma.quickTransactionTemplate.update({
@@ -55,6 +61,7 @@ export async function toggleQuickTemplateFavorite(
 }
 
 export async function moveQuickTemplate(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const direction = formData.get("direction");
   if (direction !== "up" && direction !== "down") {
@@ -91,6 +98,7 @@ export async function moveQuickTemplate(formData: FormData): Promise<void> {
 }
 
 export async function deleteQuickTemplate(formData: FormData): Promise<void> {
+  await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   await prisma.quickTransactionTemplate.delete({ where: { id } });
   revalidateQuickTemplateViews();

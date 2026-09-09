@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import type { TransactionType, WeeklyBudgetImpactScope } from "@prisma/client";
 import {
@@ -35,6 +37,7 @@ import { formatPlainAmount } from "@/domain/money";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  await requireCurrentUser();
   const today = new Date();
   const {
     currentMonth,
@@ -128,6 +131,7 @@ export default async function Home() {
           ).padStart(2, "0")}`}
           isMonthClosed={currentMonthClose !== null}
           monthLabel={capitalize(monthFormatter.format(today))}
+          weeklySpendingCap={weeklyBudgetReport.setting.weeklySpendingCap}
           status={weeklyBudgetReport.status}
         />
 
@@ -687,12 +691,18 @@ function SavingsBucketsGoalPanel({
 }
 
 function getRecentTransactionEditBlockReason(transaction: {
+  isPeriodClosed?: boolean;
+  savingsTransferId?: string | null;
+  affectsRealBalance?: boolean;
   monthlyCloseId: string | null;
   originalReimbursement: { id: string } | null;
   recurringOccurrence: { id: string } | null;
   reimbursementId: string | null;
   type: TransactionType;
 }): string | null {
+  if (transaction.isPeriodClosed) return "Reabre el mes para modificar sus movimientos.";
+  if (transaction.savingsTransferId) return "Transferencia entre partidas; gestiónala desde su histórico.";
+  if (transaction.type === "expense" && transaction.affectsRealBalance === false) return "Gasto convertido; gestiónalo desde reembolsos.";
   if (transaction.monthlyCloseId) {
     return "Incluido en un cierre mensual; no se edita desde recientes.";
   }

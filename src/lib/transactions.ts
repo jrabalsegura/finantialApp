@@ -1,3 +1,5 @@
+
+import { adjustAccountBalance, adjustBucketBalance } from "@/lib/balances";
 import type {
   Prisma,
   QuickTransactionTemplateType,
@@ -5,6 +7,8 @@ import type {
 } from "@prisma/client";
 import { getQuickTransactionRules } from "@/domain/transaction-rules";
 import { toMoneyNumber } from "@/domain/financial-calculations";
+import { assertPeriodOpen } from "./closed-periods";
+import { normalizeMoney } from "@/domain/money";
 import { prisma } from "./prisma";
 
 export type CreateTransactionInput = {
@@ -31,6 +35,7 @@ async function createTransactionInTx(
   tx: Prisma.TransactionClient,
   input: CreateTransactionInput
 ) {
+  await assertPeriodOpen(tx, input.date);
   const rules = getQuickTransactionRules({
     type: input.type,
     amount: input.amount,
@@ -90,8 +95,8 @@ async function createTransactionInTx(
       throw new Error("El pendiente seleccionado ya no admite cobros.");
     }
     const pendingAmount =
-      toMoneyNumber(reimbursement.expectedAmount) -
-      toMoneyNumber(reimbursement.paidAmount);
+      normalizeMoney(toMoneyNumber(reimbursement.expectedAmount) -
+      toMoneyNumber(reimbursement.paidAmount));
     if (input.amount > pendingAmount) {
       throw new Error("El cobro no puede superar el importe pendiente.");
     }
@@ -106,7 +111,7 @@ async function createTransactionInTx(
       rules
     );
     const newPaidAmount =
-      toMoneyNumber(reimbursement.paidAmount) + input.amount;
+      normalizeMoney(toMoneyNumber(reimbursement.paidAmount) + input.amount);
     await tx.reimbursement.update({
       where: { id: reimbursementId },
       data: {
@@ -163,17 +168,11 @@ async function applyRules(
   rules: ReturnType<typeof getQuickTransactionRules>
 ): Promise<void> {
   for (const balanceDelta of rules.balanceDeltas) {
-    await tx.account.update({
-      where: { id: balanceDelta.accountId },
-      data: { currentBalance: { increment: balanceDelta.delta } }
-    });
+    await adjustAccountBalance(tx, balanceDelta.accountId, (balanceDelta.delta) );
   }
 
   if (rules.savingsBucketDelta > 0 && input.savingsBucketId) {
-    await tx.savingsBucket.update({
-      where: { id: input.savingsBucketId },
-      data: { currentAmount: { increment: rules.savingsBucketDelta } }
-    });
+    await adjustBucketBalance(tx, input.savingsBucketId, (rules.savingsBucketDelta) );
   }
 }
 

@@ -17,7 +17,8 @@ export async function createUserSession(
   const durationSeconds = remember
     ? REMEMBERED_SESSION_DURATION_SECONDS
     : SESSION_DURATION_SECONDS;
-  const token = await createSessionToken(userId, durationSeconds);
+  const user = await prisma.appUser.findUniqueOrThrow({ where: { id: userId }, select: { sessionVersion: true } });
+  const token = await createSessionToken(userId, durationSeconds, undefined, user.sessionVersion);
   const cookieStore = await cookies();
 
   cookieStore.set(
@@ -39,14 +40,16 @@ export async function getCurrentUser() {
   const session = await verifySessionToken(token);
   if (!session) return null;
 
-  return prisma.appUser.findUnique({
+  const user = await prisma.appUser.findUnique({
     where: { id: session.userId },
     select: {
+      sessionVersion: true,
       createdAt: true,
       id: true,
       username: true
     }
   });
+  return user && user.sessionVersion === session.sessionVersion ? user : null;
 }
 
 export async function requireCurrentUser() {

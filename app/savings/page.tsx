@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { ConfirmSubmitButton } from "../components/ConfirmSubmitButton";
 import {
@@ -24,6 +26,7 @@ import { SavingsGoalProgress } from "../components/SavingsGoalProgress";
 export const dynamic = "force-dynamic";
 
 export default async function SavingsPage() {
+  await requireCurrentUser();
   const [accounts, savingsBuckets] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],

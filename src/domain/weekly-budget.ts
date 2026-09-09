@@ -36,6 +36,8 @@ export type RecurringTransactionForBudget = {
   occurrences?: Array<{
     scheduledDate: Date | string;
     status: "pending" | "confirmed" | "skipped";
+    amount?: MoneyValue;
+    generatedTransaction?: { date: Date | string; amount: MoneyValue } | null;
   }>;
 };
 
@@ -332,12 +334,11 @@ export function getWeeklyBudgetStatus({
     referenceDate,
     setting
   );
-  const monthAvailabilityTransfers =
-    getAvailabilityReducingTransfersForMonth(
-      transactions,
-      referenceDate,
-      setting
-    );
+  const monthAvailabilityTransfers = getAvailabilityReducingTransfersForMonth(
+    transactions,
+    referenceDate,
+    setting
+  );
   const weekAvailabilityTransfers = getAvailabilityReducingTransfersForWeek(
     transactions,
     referenceDate,
@@ -457,9 +458,8 @@ export function getWeeklyBudgetStatus({
       : null;
   const hasSufficientConfiguration = recurringTransactions.some(
     (transaction) =>
-      transaction.isActive &&
       transaction.type === "income" &&
-      appliesToMonth(transaction, referenceDate)
+      getIncludedRecurringOccurrenceCount(transaction, referenceDate) > 0
   );
 
   return {
@@ -506,71 +506,89 @@ function sumRecurringTransactions(
 ): number {
   return roundMoney(
     recurringTransactions
-      .filter(
-        (transaction) =>
-          transaction.isActive &&
-          transaction.type === type &&
-          appliesToMonth(transaction, referenceDate)
-      )
+      .filter((t) => t.type === type)
       .reduce(
         (total, transaction) =>
-          total +
-          toMoneyNumber(transaction.amount) *
-            getIncludedRecurringOccurrenceCount(transaction, referenceDate),
+          total + getRecurringBudgetAmount(transaction, referenceDate),
         0
       )
   );
 }
 
-function appliesToMonth(
-  transaction: RecurringTransactionForBudget,
-  referenceDate: Date
-): boolean {
-  return getIncludedRecurringOccurrenceCount(transaction, referenceDate) > 0;
-}
+type ScheduledBudgetTransaction = Pick<
+  RecurringTransactionForBudget,
+  | "dayOfMonth"
+  | "dayOfWeek"
+  | "frequency"
+  | "startDate"
+  | "endDate"
+  | "occurrences"
+> & { isActive?: boolean; amount?: MoneyValue };
 
-export function getIncludedRecurringOccurrenceCount(
-  transaction: Pick<
-    RecurringTransactionForBudget,
-    | "dayOfMonth"
-    | "dayOfWeek"
-    | "frequency"
-    | "startDate"
-    | "endDate"
-    | "occurrences"
-  >,
+function includedRecurringAmounts(
+  transaction: ScheduledBudgetTransaction,
   referenceDate: Date
-): number {
-  const scheduledDates = getScheduledDatesForMonth(
+): number[] {
+  const start = startOfMonth(referenceDate);
+  const end = endOfMonth(referenceDate);
+  const occurrences = transaction.occurrences ?? [];
+  const confirmed = occurrences.filter((o) => {
+    const effectiveDate = new Date(
+      o.generatedTransaction?.date ?? o.scheduledDate
+    );
+    return (
+      o.status === "confirmed" && effectiveDate >= start && effectiveDate <= end
+    );
+  });
+  const amounts = confirmed.map((o) =>
+    toMoneyNumber(
+      o.generatedTransaction?.amount ?? o.amount ?? transaction.amount ?? 0
+    )
+  );
+  if (transaction.isActive === false) return amounts;
+  const dates = getScheduledDatesForMonth(
     transaction,
     referenceDate.getFullYear(),
     referenceDate.getMonth() + 1
   );
-
-  if (!transaction.occurrences) {
-    return scheduledDates.length;
+  const monthlyProcessed =
+    transaction.frequency !== "weekly" &&
+    occurrences.some((o) => {
+      const date = new Date(o.scheduledDate);
+      return o.status !== "pending" && date >= start && date <= end;
+    });
+  for (const date of dates) {
+    const occurrence = occurrences.find(
+      (o) => toCalendarDateKey(o.scheduledDate) === toCalendarDateKey(date)
+    );
+    if (
+      occurrence?.status === "confirmed" ||
+      occurrence?.status === "skipped" ||
+      monthlyProcessed
+    )
+      continue;
+    amounts.push(toMoneyNumber(occurrence?.amount ?? transaction.amount ?? 0));
   }
+  return amounts;
+}
 
-  const occurrencesByScheduledDate = new Map(
-    transaction.occurrences.map((occurrence) => [
-      toCalendarDateKey(occurrence.scheduledDate),
-      occurrence.status
-    ])
+export function getRecurringBudgetAmount(
+  transaction: ScheduledBudgetTransaction,
+  referenceDate: Date
+): number {
+  return roundMoney(
+    includedRecurringAmounts(transaction, referenceDate).reduce(
+      (sum, value) => sum + value,
+      0
+    )
   );
-  const scheduledDateKeys = new Set(
-    scheduledDates.map((date) => toCalendarDateKey(date))
-  );
-  const includedScheduledOccurrences = scheduledDates.filter(
-    (date) =>
-      occurrencesByScheduledDate.get(toCalendarDateKey(date)) !== "skipped"
-  ).length;
-  const confirmedOutsideCurrentSchedule = transaction.occurrences.filter(
-    (occurrence) =>
-      occurrence.status === "confirmed" &&
-      !scheduledDateKeys.has(toCalendarDateKey(occurrence.scheduledDate))
-  ).length;
+}
 
-  return includedScheduledOccurrences + confirmedOutsideCurrentSchedule;
+export function getIncludedRecurringOccurrenceCount(
+  transaction: ScheduledBudgetTransaction,
+  referenceDate: Date
+): number {
+  return includedRecurringAmounts(transaction, referenceDate).length;
 }
 
 function toCalendarDateKey(value: Date | string): string {
@@ -586,7 +604,9 @@ function isVariableExpense(
     "includePendingTransactions" | "includeReimbursableExpenses"
   >
 ): boolean {
-  if (getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_and_monthly") {
+  if (
+    getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_and_monthly"
+  ) {
     return false;
   }
 
@@ -611,7 +631,9 @@ function isAvailabilityReducingTransfer(
   transaction: VariableExpenseForBudget,
   setting: Pick<BudgetSettingForCalculation, "includePendingTransactions">
 ): boolean {
-  if (getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_and_monthly") {
+  if (
+    getWeeklyBudgetImpactScope(transaction) === "exclude_weekly_and_monthly"
+  ) {
     return false;
   }
 
@@ -677,8 +699,7 @@ function isBaseExtraIncome(
   }
 
   return (
-    transaction.type === "income" &&
-    transaction.affectsPersonalIncome !== false
+    transaction.type === "income" && transaction.affectsPersonalIncome !== false
   );
 }
 
@@ -748,15 +769,7 @@ function startOfMonth(date: Date): Date {
 }
 
 function endOfMonth(date: Date): Date {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999
-  );
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 }
 
 function startOfWeek(date: Date): Date {

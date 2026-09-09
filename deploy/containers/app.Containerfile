@@ -54,6 +54,9 @@ COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/package.json ./package.js
 COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/node_modules ./node_modules
 COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/.next ./.next
 COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/prisma ./prisma
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/src ./src
+COPY --chown=${APP_UID}:${APP_GID} scripts ./scripts
+COPY --chown=${APP_UID}:${APP_GID} tsconfig.json ./tsconfig.json
 COPY --chown=${APP_UID}:${APP_GID} next.config.mjs ./next.config.mjs
 COPY --chmod=0555 deploy/containers/entrypoint.sh /usr/local/bin/financial-app-entrypoint
 COPY --chmod=0555 deploy/containers/healthcheck.mjs /usr/local/bin/financial-app-healthcheck.mjs
@@ -68,4 +71,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/local/bin/financial-app-entrypoint"]
-CMD ["node_modules/.bin/next", "start", "--hostname", "0.0.0.0", "--port", "3000"]
+CMD ["node", "scripts/start.mjs", "--hostname", "0.0.0.0", "--port", "3000"]

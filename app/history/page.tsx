@@ -1,3 +1,5 @@
+
+import { requireCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import {
   calculateNetWorthVariation,
@@ -12,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export default async function HistoryPage() {
+  await requireCurrentUser();
   const closes = await prisma.monthlyClose.findMany({
     orderBy: [{ year: "desc" }, { month: "desc" }],
     select: {

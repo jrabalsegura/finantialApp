@@ -15,6 +15,8 @@ import {
   calculateLongTermBucketAdjustment,
   calculateLongTermBucketBalance,
   getManualMonthlyCloseResult,
+  getDeficitFunding,
+  calculateAvailableMoney,
   getMonthlyCloseResult
 } from "@/domain/financial-calculations";
 
@@ -36,11 +38,7 @@ type MonthlyCloseBucket = {
   targetAmount: number | null;
 };
 
-type AdjustmentKind =
-  | "expense"
-  | "income"
-  | "technical"
-  | "unassigned_savings";
+type AdjustmentKind = "expense" | "income" | "technical" | "unassigned_savings";
 
 type MonthlyCloseFormProps = {
   accounts: MonthlyCloseAccount[];
@@ -72,14 +70,13 @@ export function MonthlyCloseForm({
 }: MonthlyCloseFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [confirmed, setConfirmed] = useState(false);
-  const [realBalances, setRealBalances] = useState<Record<string, string>>(
-    () =>
-      Object.fromEntries(
-        accounts.map((account) => [
-          account.id,
-          formatInputAmount(account.calculatedBalance)
-        ])
-      )
+  const [realBalances, setRealBalances] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      accounts.map((account) => [
+        account.id,
+        formatInputAmount(account.calculatedBalance)
+      ])
+    )
   );
   const [adjustmentKinds, setAdjustmentKinds] = useState<
     Record<string, AdjustmentKind>
@@ -113,7 +110,7 @@ export function MonthlyCloseForm({
   );
   const estimatedMonthlySavings = roundMoney(
     accountRows.reduce((total, account) => {
-      if (accountFeedsLongTermBucket(account)) {
+      if (!account.includeInMonthlySavings) {
         return total;
       }
 
@@ -175,8 +172,18 @@ export function MonthlyCloseForm({
       0
     )
   );
+  const deficitFunding = getDeficitFunding(
+    closeResult.deficit,
+    calculateAvailableMoney(
+      accountRows.map((account) => ({
+        ...account,
+        currentBalance: account.realBalance
+      }))
+    ),
+    manualBuckets.reduce((sum, bucket) => sum + bucket.currentAmount, 0)
+  );
   const reductionRemaining = roundMoney(
-    closeResult.deficit - reductionTotal
+    deficitFunding.fromBuckets - reductionTotal
   );
   const totalAvailableInBuckets = roundMoney(
     manualBuckets.reduce((total, bucket) => total + bucket.currentAmount, 0)
@@ -198,16 +205,32 @@ export function MonthlyCloseForm({
     reductionTotal < 0 ||
     hasReductionOverBalance ||
     (closeResult.kind === "negative"
-      ? reductionTotal !== closeResult.deficit
+      ? reductionTotal !== deficitFunding.fromBuckets
       : reductionTotal > 0);
   const hasInsufficientBucketBalance =
     closeResult.kind === "negative" &&
-    totalAvailableInBuckets < closeResult.deficit;
+    totalAvailableInBuckets < deficitFunding.fromBuckets;
 
   return (
     <form action={formAction} className="grid gap-6">
       <input name="month" type="hidden" value={month} />
       <input name="year" type="hidden" value={year} />
+      {accounts.map((account) => (
+        <input
+          key={account.id}
+          name={`calculatedBalance_${account.id}`}
+          type="hidden"
+          value={account.calculatedBalance}
+        />
+      ))}
+      {deficitFunding.fromFreeSavings > 0 ? (
+        <p className="rounded-lg bg-surface p-4 text-sm">
+          Se cubren {currencyFormatter.format(deficitFunding.fromFreeSavings)}{" "}
+          del déficit con ahorro libre. Quedan{" "}
+          {currencyFormatter.format(deficitFunding.fromBuckets)} por descontar
+          de partidas. Esto no genera otro cargo en tus cuentas.
+        </p>
+      ) : null}
 
       <section className="rounded-lg border border-line bg-white shadow-sm">
         <StepHeader
@@ -250,7 +273,7 @@ export function MonthlyCloseForm({
                       const currentKind =
                         adjustmentKinds[account.id] ?? "technical";
                       const feedsLongTermBucket =
-                        accountFeedsLongTermBucket(account);
+                        !account.includeInMonthlySavings;
 
                       setRealBalances((current) => ({
                         ...current,
@@ -287,7 +310,7 @@ export function MonthlyCloseForm({
                 <ReadOnlyAmount label="Diferencia" value={account.difference} />
               </div>
 
-              {account.difference !== 0 && accountFeedsLongTermBucket(account) ? (
+              {account.difference !== 0 && !account.includeInMonthlySavings ? (
                 <div className="grid gap-2 sm:max-w-md">
                   <input
                     name={`adjustmentKind_${account.id}`}
@@ -296,7 +319,7 @@ export function MonthlyCloseForm({
                   />
                   <p className="rounded-lg bg-surface px-3 py-2 text-sm font-medium text-muted">
                     Esta cuenta no cuenta para el ahorro mensual; su diferencia
-                    se trata como ajuste técnico y se refleja en Largo plazo.
+                    se trata como ajuste técnico.
                   </p>
                 </div>
               ) : account.difference !== 0 ? (
@@ -331,7 +354,8 @@ export function MonthlyCloseForm({
                 />
               )}
 
-              {account.adjustmentKind === "expense" && account.difference > 0 ? (
+              {account.adjustmentKind === "expense" &&
+              account.difference > 0 ? (
                 <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
                   Esta diferencia aumenta el saldo real; si impacta en informes,
                   debe ser ingreso real.
@@ -452,12 +476,13 @@ export function MonthlyCloseForm({
             </div>
             {hasInvalidAllocation ? (
               <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800">
-                Todo el ahorro mensual positivo debe quedar asignado a
-                partidas, sin restante ni exceso.
+                Todo el ahorro mensual positivo debe quedar asignado a partidas,
+                sin restante ni exceso.
               </p>
             ) : null}
           </div>
-        ) : manualBuckets.length > 0 && manualCloseResult.kind === "negative" ? (
+        ) : manualBuckets.length > 0 &&
+          manualCloseResult.kind === "negative" ? (
           <div className="grid gap-4 p-4 sm:p-5">
             <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
               <p className="font-semibold">
@@ -501,8 +526,14 @@ export function MonthlyCloseForm({
                       showName
                     />
                     <div className="grid grid-cols-2 gap-2 text-xs text-muted">
-                      <BucketAmount label="Saldo actual" value={bucket.currentAmount} />
-                      <BucketAmount label="Objetivo" value={bucket.targetAmount} />
+                      <BucketAmount
+                        label="Saldo actual"
+                        value={bucket.currentAmount}
+                      />
+                      <BucketAmount
+                        label="Objetivo"
+                        value={bucket.targetAmount}
+                      />
                       <BucketAmount label="Saldo final" value={finalAmount} />
                       <BucketAmount
                         label="Hasta objetivo"
@@ -511,7 +542,8 @@ export function MonthlyCloseForm({
                     </div>
                     {currentProgress.hasGoal ? (
                       <p className="rounded-lg bg-white px-3 py-2 text-xs text-muted">
-                        Actual: {formatPercentage(currentProgress.percentage ?? 0)}
+                        Actual:{" "}
+                        {formatPercentage(currentProgress.percentage ?? 0)}
                         {" · "}Final:{" "}
                         {formatPercentage(finalProgress.percentage ?? 0)}
                       </p>
@@ -598,7 +630,8 @@ export function MonthlyCloseForm({
             onChange={(event) => setConfirmed(event.target.checked)}
             type="checkbox"
           />
-          Confirmo que los saldos reales son correctos y quiero guardar el cierre.
+          Confirmo que los saldos reales son correctos y quiero guardar el
+          cierre.
         </label>
         <button
           className="primary-button mt-4 w-full sm:w-auto"
