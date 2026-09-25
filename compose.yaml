@@ -13,7 +13,7 @@ services:
       SESSION_COOKIE_SECURE: "false"
       TZ: "Europe/Madrid"
     ports:
-      - "127.0.0.1:${FINANCIAL_APP_HTTP_PORT:-3080}:3000"
+      - "127.0.0.1:${FINANCIAL_APP_HTTP_PORT:-3081}:3000"
     volumes:
       - ./.container-data:/data
     init: true

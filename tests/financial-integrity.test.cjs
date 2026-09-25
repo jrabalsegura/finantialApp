@@ -28,6 +28,9 @@ Module._load = function (name, ...args) {
     return {
       redirect(path) {
         throw new Error("REDIRECT:" + path);
+      },
+      unstable_rethrow(error) {
+        if (String(error?.message).startsWith("REDIRECT:")) throw error;
       }
     };
   if (name === "next/headers")
@@ -54,6 +57,13 @@ const { createUserSession, getCurrentUser } = require("../src/lib/auth.ts");
 const { hashPassword } = require("../src/lib/password.ts");
 const { getChangesAfter } = require("../src/lib/historical-balances.ts");
 const cookieName = "financial_app_session";
+const { FLASH_COOKIE_NAME } = require("../src/lib/action-feedback.ts");
+// Form actions report errors through the flash cookie instead of throwing.
+const assertFlash = async (promise, pattern) => {
+  await promise;
+  assert.match(jar.get(FLASH_COOKIE_NAME) ?? "", pattern);
+  jar.delete(FLASH_COOKIE_NAME);
+};
 const form = (values) => {
   const f = new FormData();
   for (const [k, v] of Object.entries(values)) f.set(k, String(v));
@@ -82,6 +92,7 @@ before(async () => {
   });
 });
 beforeEach(async () => {
+  jar.delete(FLASH_COOKIE_NAME);
   await importBackup(empty);
   await createUserSession(user.id);
 });
@@ -142,6 +153,48 @@ test("el reembolso de 0,30 admite cobrar 0,10 y luego 0,20 exactamente", async (
   assert.equal(await balance(a.id), 1000);
 });
 
+test("la pantalla de reembolsos cobra 0,10 y 0,20 de un pendiente de 0,30", async () => {
+  const a = await account();
+  await actions.createReimbursableExpense(
+    form({
+      accountId: a.id,
+      amount: "0,30",
+      title: "Café",
+      personName: "Test",
+      notes: "nota",
+      dueDate: "2026-06-30",
+      date: "2026-06-10"
+    })
+  );
+  const r = await prisma.reimbursement.findFirst();
+  assert.equal(r.notes, "nota");
+  assert.ok(r.dueDate);
+  for (const n of ["0,10", "0,20"])
+    await actions.recordReimbursementPayment(
+      form({ reimbursementId: r.id, accountId: a.id, amount: n, date: "2026-06-11" })
+    );
+  assert.equal(jar.get(FLASH_COOKIE_NAME), undefined);
+  assert.equal(
+    (await prisma.reimbursement.findUnique({ where: { id: r.id } })).status,
+    "paid"
+  );
+  const payment = await prisma.transaction.findFirst({
+    where: { type: "reimbursement_income" }
+  });
+  assert.equal(payment.description, "Cobro de reembolso: Café");
+  assert.equal(await balance(a.id), 1000);
+});
+
+test("un nombre duplicado muestra un aviso en vez de romper la página", async () => {
+  await account();
+  await assertFlash(
+    actions.createAccount(
+      form({ name: "Test account", type: "checking", currentBalance: 0 })
+    ),
+    /Ya existe/
+  );
+});
+
 test("convertir un reembolso no permite recuperar dinero borrando el gasto", async () => {
   const a = await account();
   await createTransactionFromDraft(
@@ -156,7 +209,7 @@ test("convertir un reembolso no permite recuperar dinero borrando el gasto", asy
   );
   const t = await prisma.transaction.findFirst({ where: { type: "expense" } });
   assert.equal(t.reimbursementId, r.id);
-  await assert.rejects(
+  await assertFlash(
     actions.deleteRecentTransaction(form({ id: t.id })),
     /convertido|reembolsos/
   );
@@ -165,7 +218,7 @@ test("convertir un reembolso no permite recuperar dinero borrando el gasto", asy
     where: { id: t.id },
     data: { reimbursementId: null }
   }); // legacy orphan
-  await assert.rejects(
+  await assertFlash(
     actions.deleteRecentTransaction(form({ id: t.id })),
     /convertido/
   );
@@ -182,7 +235,7 @@ test("cerrar junio conserva los gastos de julio y bloquea cambios de junio", asy
   const snapshot = await prisma.monthlyAccountSnapshot.findFirst();
   assert.equal(+snapshot.calculatedBalance, 1000);
   assert.equal(+snapshot.difference, 0);
-  await assert.rejects(
+  await assertFlash(
     actions.deleteRecentTransaction(form({ id: income.id })),
     /Reabre/
   );
@@ -193,7 +246,7 @@ test("cerrar junio conserva los gastos de julio y bloquea cambios de junio", asy
   const july = await prisma.transaction.findFirst({
     where: { type: "expense" }
   });
-  await assert.rejects(
+  await assertFlash(
     actions.updateRecentTransaction(
       form({
         id: july.id,
@@ -282,7 +335,7 @@ test("renombrar una cuenta desde un formulario antiguo conserva el saldo nuevo",
   };
   await actions.updateAccount(form(fields));
   assert.equal(await balance(a.id), 900);
-  await assert.rejects(
+  await assertFlash(
     actions.updateAccount(form({ ...fields, currentBalance: 950 })),
     /saldo ha cambiado/
   );
@@ -398,7 +451,7 @@ test("el presupuesto conserva el importe confirmado al cambiar o desactivar la p
       .fixedMonthlyExpenses,
     150
   );
-  await assert.rejects(
+  await assertFlash(
     recurringActions.deleteRecurringTransaction(form({ id: t.id })),
     /historial/
   );
@@ -417,11 +470,11 @@ test("las transferencias entre partidas se revierten completas y no dejan reabri
   const leg = await prisma.transaction.findFirst({
     where: { savingsTransferId: { not: null }, type: "savings_allocation" }
   });
-  await assert.rejects(
+  await assertFlash(
     actions.deleteRecentTransaction(form({ id: leg.id })),
     /operación completa/
   );
-  await assert.rejects(
+  await assertFlash(
     actions.undoLatestMonthlyClose(form({ closeId: c.id })),
     /Devuelve primero/
   );
@@ -469,7 +522,7 @@ test("una categoría no puede invalidar una plantilla recurrente existente", asy
       startDate: new Date("2026-06-01T12:00:00")
     }
   });
-  await assert.rejects(
+  await assertFlash(
     categoryActions.updateCategory(
       form({ id: c.id, name: c.name, type: "income" })
     ),

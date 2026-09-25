@@ -1,33 +1,18 @@
 "use server";
-import { adjustBucketBalance, adjustAccountBalance } from "@/lib/balances";
 
-import { requireCurrentUser } from "@/lib/auth";
-
+import type { Prisma, WeeklyBudgetImpactScope } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type {
-  AccountType,
-  Prisma,
-  WeeklyBudgetImpactScope
-} from "@prisma/client";
-import { undoSavingsTransferInTransaction } from "@/lib/savings-transfers";
 import { randomUUID } from "node:crypto";
-import { assertPeriodOpen } from "@/lib/closed-periods";
 import {
-  getChangesAfter,
-  getReimbursementsAt
-} from "@/lib/historical-balances";
-import { prisma } from "@/lib/prisma";
-import {
-  accountFeedsLongTermBucket,
+  calculateAvailableMoney,
   calculateLongTermBucketBalance,
   calculateLongTermTransferAllocation,
-  createMonthlyBucketSnapshots,
-  calculateAvailableMoney,
   calculateNetWorth,
   calculateRealMonthlyExpense,
   calculateRealMonthlyIncome,
   calculateRealMonthlySavings,
+  createMonthlyBucketSnapshots,
   getDefaultTransactionImpact,
   getDeficitFunding,
   getManualMonthlyCloseResult,
@@ -38,16 +23,49 @@ import {
 } from "@/domain/financial-calculations";
 import {
   ACCOUNT_TYPES,
-  QUICK_TRANSACTION_TYPES
+  QUICK_TRANSACTION_TYPES,
+  WEEKLY_BUDGET_IMPACT_SCOPES
 } from "@/domain/domain-options";
+import { normalizeMoney } from "@/domain/money";
 import {
   getConvertReimbursementToExpenseRules,
   getQuickTransactionRules,
-  getReimbursementTransactionRules,
   type QuickTransactionType
 } from "@/domain/transaction-rules";
-import { normalizeMoney, parseMoneyInput } from "@/domain/money";
-import { createTransactionFromDraft } from "@/lib/transactions";
+import {
+  getActionErrorMessage,
+  withErrorFeedback
+} from "@/lib/action-feedback";
+import { requireCurrentUser } from "@/lib/auth";
+import { adjustAccountBalance, adjustBucketBalance } from "@/lib/balances";
+import { assertPeriodOpen } from "@/lib/closed-periods";
+import {
+  parseAmount,
+  parseAmountAllowingZero,
+  parseCheckbox,
+  parseDateOrNow,
+  parseEnum,
+  parseInteger,
+  parseNonNegativeAmount,
+  parseOptionalDate,
+  parseOptionalInteger,
+  parseOptionalNonNegativeAmount,
+  parseOptionalString,
+  parseRequiredString
+} from "@/lib/form-data";
+import {
+  getChangesAfter,
+  getReimbursementsAt
+} from "@/lib/historical-balances";
+import { prisma } from "@/lib/prisma";
+import { undoSavingsTransferInTransaction } from "@/lib/savings-transfers";
+import {
+  applyBalanceDeltas,
+  assertAccountExists,
+  assertCategoryMatchesType,
+  assertSavingsBucketExists,
+  createTransactionFromDraft
+} from "@/lib/transactions";
 
 export type TransactionFormState = {
   status: "idle" | "success" | "error";
@@ -69,28 +87,17 @@ type MonthlyCloseAdjustmentImpact = {
   affectsNetWorth: boolean;
 };
 
-const VALID_QUICK_TRANSACTION_TYPES = new Set<QuickTransactionType>(
-  QUICK_TRANSACTION_TYPES
-);
-const VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS =
-  new Set<MonthlyCloseAdjustmentKind>([
-    "expense",
-    "income",
-    "technical",
-    "unassigned_savings"
-  ]);
-const VALID_ACCOUNT_TYPES = new Set<AccountType>(ACCOUNT_TYPES);
+const MONTHLY_CLOSE_ADJUSTMENT_KINDS: MonthlyCloseAdjustmentKind[] = [
+  "expense",
+  "income",
+  "technical",
+  "unassigned_savings"
+];
 const EDITABLE_TRANSACTION_TYPES = new Set<QuickTransactionType>([
   "expense",
   "income",
   "transfer",
   "savings_allocation"
-]);
-const WEEKLY_BUDGET_IMPACT_SCOPES = new Set<WeeklyBudgetImpactScope>([
-  "normal",
-  "exclude_weekly_expense",
-  "exclude_weekly_and_monthly",
-  "include_weekly_and_monthly_income"
 ]);
 
 export async function createQuickTransaction(
@@ -99,7 +106,11 @@ export async function createQuickTransaction(
 ): Promise<TransactionFormState> {
   await requireCurrentUser();
   try {
-    const type = parseTransactionType(formData.get("type"));
+    const type = parseEnum(
+      formData.get("type"),
+      QUICK_TRANSACTION_TYPES,
+      "Tipo de movimiento no válido."
+    );
     const amount = parseAmount(formData.get("amount"));
     const accountId = parseRequiredString(formData.get("accountId"));
     const destinationAccountId =
@@ -115,7 +126,7 @@ export async function createQuickTransaction(
         ? parseRequiredString(formData.get("savingsBucketId"))
         : null;
     const description = parseOptionalString(formData.get("description"));
-    const date = parseTransactionDate(formData.get("date"));
+    const date = parseDateOrNow(formData.get("date"));
     const personName =
       type === "reimbursable_expense"
         ? parseRequiredString(formData.get("personName"))
@@ -152,354 +163,263 @@ export async function createQuickTransaction(
   } catch (error) {
     return {
       status: "error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "No se pudo guardar el movimiento."
+      message: getActionErrorMessage(error)
     };
   }
 }
 
-export async function updateRecentTransaction(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  const type = parseEditableTransactionType(formData.get("type"));
-  const amount = parseAmount(formData.get("amount"));
-  const date = parseTransactionDate(formData.get("date"));
-  const accountId = parseRequiredString(formData.get("accountId"));
-  const destinationAccountId =
-    type === "transfer"
-      ? parseRequiredString(formData.get("destinationAccountId"))
-      : null;
-  const categoryId =
-    type === "expense" || type === "income"
-      ? parseOptionalString(formData.get("categoryId"))
-      : null;
-  const savingsBucketId =
-    type === "savings_allocation"
-      ? parseRequiredString(formData.get("savingsBucketId"))
-      : null;
-  const description = parseOptionalString(formData.get("description"));
-  const weeklyBudgetImpactScope = normalizeWeeklyBudgetImpactScope(
-    type,
-    parseWeeklyBudgetImpactScope(formData.get("weeklyBudgetImpactScope"))
-  );
-
-  await prisma.$transaction(async (tx) => {
-    const transaction = await getEditableTransaction(tx, id, {
-      allowConfirmedRecurring: true
-    });
-
-    await assertPeriodOpen(tx, date);
-    if (transaction.recurringOccurrence && type !== transaction.type) {
-      throw new Error(
-        "No se puede cambiar el tipo de un movimiento fijo confirmado."
-      );
-    }
-    const effectiveWeeklyBudgetImpactScope = transaction.recurringOccurrence
-      ? "normal"
-      : weeklyBudgetImpactScope;
-
-    await reverseEditableTransaction(tx, transaction);
-
-    const rules = getQuickTransactionRules({
+export const updateRecentTransaction = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    const type = parseEditableTransactionType(formData.get("type"));
+    const amount = parseAmount(formData.get("amount"));
+    const date = parseDateOrNow(formData.get("date"));
+    const accountId = parseRequiredString(formData.get("accountId"));
+    const destinationAccountId =
+      type === "transfer"
+        ? parseRequiredString(formData.get("destinationAccountId"))
+        : null;
+    const categoryId =
+      type === "expense" || type === "income"
+        ? parseOptionalString(formData.get("categoryId"))
+        : null;
+    const savingsBucketId =
+      type === "savings_allocation"
+        ? parseRequiredString(formData.get("savingsBucketId"))
+        : null;
+    const description = parseOptionalString(formData.get("description"));
+    const weeklyBudgetImpactScope = normalizeWeeklyBudgetImpactScope(
       type,
-      amount,
-      accountId,
-      destinationAccountId,
-      savingsBucketId
-    });
-
-    await assertAccountExists(tx, accountId);
-    if (destinationAccountId) {
-      await assertAccountExists(tx, destinationAccountId);
-    }
-    if (categoryId && (type === "expense" || type === "income")) {
-      await assertCategoryMatchesType(tx, categoryId, type);
-    }
-    if (savingsBucketId) {
-      await assertEditableSavingsBucketExists(tx, savingsBucketId);
-    }
-
-    await tx.transaction.update({
-      where: { id },
-      data: {
-        accountId,
-        affectsMonthlySavings: rules.impact.affectsMonthlySavings,
-        affectsNetWorth: rules.impact.affectsNetWorth,
-        affectsPersonalExpense: rules.impact.affectsPersonalExpense,
-        affectsPersonalIncome: rules.impact.affectsPersonalIncome,
-        affectsRealBalance: rules.impact.affectsRealBalance,
-        amount,
-        categoryId,
-        date,
-        description,
-        destinationAccountId,
-        weeklyBudgetImpactScope: effectiveWeeklyBudgetImpactScope,
-        savingsBucketId,
-        type
-      }
-    });
-
-    await applyBalanceDeltas(tx, rules.balanceDeltas);
-
-    if (rules.savingsBucketDelta > 0 && savingsBucketId) {
-      await adjustBucketBalance(tx, savingsBucketId, rules.savingsBucketDelta);
-    }
-
-    if (transaction.recurringOccurrence) {
-      await tx.recurringTransactionOccurrence.update({
-        where: { id: transaction.recurringOccurrence.id },
-        data: {
-          amount
-        }
-      });
-    }
-  });
-
-  revalidateTransactionViews();
-}
-
-export async function deleteRecentTransaction(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-
-  await prisma.$transaction(async (tx) => {
-    const transaction = await getEditableTransaction(tx, id, {
-      allowConfirmedRecurring: true
-    });
-
-    await reverseEditableTransaction(tx, transaction);
-
-    if (transaction.recurringOccurrence) {
-      await tx.recurringTransactionOccurrence.update({
-        where: { id: transaction.recurringOccurrence.id },
-        data: {
-          generatedTransactionId: null,
-          status: "skipped"
-        }
-      });
-    }
-
-    await tx.transaction.delete({ where: { id } });
-  });
-
-  revalidateTransactionViews();
-}
-
-export async function createReimbursableExpense(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const amount = parseAmount(formData.get("amount"));
-  const accountId = parseRequiredString(formData.get("accountId"));
-  const categoryId = parseOptionalString(formData.get("categoryId"));
-  const title = parseRequiredString(formData.get("title"));
-  const personName = parseRequiredString(formData.get("personName"));
-  const notes = parseOptionalString(formData.get("notes"));
-  const dueDate = parseOptionalDate(formData.get("dueDate"));
-  const date = parseTransactionDate(formData.get("date"));
-  const rules = getReimbursementTransactionRules({
-    type: "reimbursable_expense",
-    amount,
-    accountId
-  });
-
-  await prisma.$transaction(async (tx) => {
-    await assertPeriodOpen(tx, date);
-    await assertAccountExists(tx, accountId);
-
-    if (categoryId) {
-      await assertCategoryMatchesType(tx, categoryId, "expense");
-    }
-
-    const originalTransaction = await tx.transaction.create({
-      data: {
-        date,
-        amount,
-        type: "reimbursable_expense",
-        description: title,
-        accountId,
-        categoryId,
-        affectsRealBalance: rules.impact.affectsRealBalance,
-        affectsPersonalExpense: rules.impact.affectsPersonalExpense,
-        affectsPersonalIncome: rules.impact.affectsPersonalIncome,
-        affectsMonthlySavings: rules.impact.affectsMonthlySavings,
-        affectsNetWorth: rules.impact.affectsNetWorth
-      }
-    });
-
-    await tx.reimbursement.create({
-      data: {
-        title,
-        personName,
-        originalTransactionId: originalTransaction.id,
-        expectedAmount: amount,
-        paidAmount: 0,
-        status: "pending",
-        dueDate,
-        notes
-      }
-    });
-
-    await applyBalanceDeltas(tx, rules.balanceDeltas);
-  });
-
-  revalidateReimbursementViews();
-}
-
-export async function recordReimbursementPayment(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const reimbursementId = parseRequiredString(formData.get("reimbursementId"));
-  const accountId = parseRequiredString(formData.get("accountId"));
-  const amount = parseAmount(formData.get("amount"));
-  const date = parseTransactionDate(formData.get("date"));
-  const rules = getReimbursementTransactionRules({
-    type: "reimbursement_income",
-    amount,
-    accountId
-  });
-
-  await prisma.$transaction(async (tx) => {
-    await assertPeriodOpen(tx, date);
-    await assertAccountExists(tx, accountId);
-
-    const reimbursement = await tx.reimbursement.findUnique({
-      where: { id: reimbursementId },
-      include: {
-        originalTransaction: {
-          select: {
-            description: true
-          }
-        }
-      }
-    });
-
-    if (!reimbursement) {
-      throw new Error("El pendiente no existe.");
-    }
-
-    if (!["pending", "partially_paid"].includes(reimbursement.status)) {
-      throw new Error("Este pendiente ya no admite cobros.");
-    }
-
-    const expectedAmount = toMoneyNumber(reimbursement.expectedAmount);
-    const paidAmount = toMoneyNumber(reimbursement.paidAmount);
-    const pendingAmount = expectedAmount - paidAmount;
-
-    if (amount > pendingAmount) {
-      throw new Error("El cobro no puede superar el importe pendiente.");
-    }
-
-    const newPaidAmount = paidAmount + amount;
-
-    await tx.transaction.create({
-      data: {
-        date,
-        amount,
-        type: "reimbursement_income",
-        description: `Cobro de reembolso: ${
-          reimbursement.originalTransaction.description ?? reimbursement.title
-        }`,
-        accountId,
-        reimbursementId,
-        affectsRealBalance: rules.impact.affectsRealBalance,
-        affectsPersonalExpense: rules.impact.affectsPersonalExpense,
-        affectsPersonalIncome: rules.impact.affectsPersonalIncome,
-        affectsMonthlySavings: rules.impact.affectsMonthlySavings,
-        affectsNetWorth: rules.impact.affectsNetWorth
-      }
-    });
-
-    await tx.reimbursement.update({
-      where: { id: reimbursementId },
-      data: {
-        paidAmount: newPaidAmount,
-        status: newPaidAmount >= expectedAmount ? "paid" : "partially_paid"
-      }
-    });
-
-    await applyBalanceDeltas(tx, rules.balanceDeltas);
-  });
-
-  revalidateReimbursementViews();
-}
-
-export async function convertReimbursementToRealExpense(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const reimbursementId = parseRequiredString(formData.get("reimbursementId"));
-
-  await prisma.$transaction(async (tx) => {
-    await assertPeriodOpen(tx, new Date());
-    const reimbursement = await tx.reimbursement.findUnique({
-      where: { id: reimbursementId },
-      include: {
-        originalTransaction: true
-      }
-    });
-
-    if (!reimbursement) {
-      throw new Error("El pendiente no existe.");
-    }
-
-    if (!["pending", "partially_paid"].includes(reimbursement.status)) {
-      throw new Error("Este pendiente ya no se puede convertir.");
-    }
-
-    const pendingAmount = normalizeMoney(
-      toMoneyNumber(reimbursement.expectedAmount) -
-        toMoneyNumber(reimbursement.paidAmount)
+      parseWeeklyBudgetImpactScope(formData.get("weeklyBudgetImpactScope"))
     );
 
-    if (pendingAmount <= 0) {
-      throw new Error("No queda importe pendiente por convertir.");
-    }
+    await prisma.$transaction(async (tx) => {
+      const transaction = await getEditableTransaction(tx, id, {
+        allowConfirmedRecurring: true
+      });
 
-    const rules = getConvertReimbursementToExpenseRules({
-      pendingAmount,
-      accountId: reimbursement.originalTransaction.accountId
-    });
+      await assertPeriodOpen(tx, date);
+      if (transaction.recurringOccurrence && type !== transaction.type) {
+        throw new Error(
+          "No se puede cambiar el tipo de un movimiento fijo confirmado."
+        );
+      }
+      const effectiveWeeklyBudgetImpactScope = transaction.recurringOccurrence
+        ? "normal"
+        : weeklyBudgetImpactScope;
 
-    await tx.transaction.create({
-      data: {
-        date: new Date(),
-        amount: pendingAmount,
-        type: "expense",
-        reimbursementId,
-        description: `Convertido en gasto real: ${reimbursement.title}`,
-        accountId: reimbursement.originalTransaction.accountId,
-        categoryId: reimbursement.originalTransaction.categoryId,
-        affectsRealBalance: rules.impact.affectsRealBalance,
-        affectsPersonalExpense: rules.impact.affectsPersonalExpense,
-        affectsPersonalIncome: rules.impact.affectsPersonalIncome,
-        affectsMonthlySavings: rules.impact.affectsMonthlySavings,
-        affectsNetWorth: rules.impact.affectsNetWorth
+      await reverseEditableTransaction(tx, transaction);
+
+      const rules = getQuickTransactionRules({
+        type,
+        amount,
+        accountId,
+        destinationAccountId,
+        savingsBucketId
+      });
+
+      await assertAccountExists(tx, accountId);
+      if (destinationAccountId) {
+        await assertAccountExists(tx, destinationAccountId);
+      }
+      if (categoryId && (type === "expense" || type === "income")) {
+        await assertCategoryMatchesType(tx, categoryId, type);
+      }
+      if (savingsBucketId) {
+        await assertSavingsBucketExists(tx, savingsBucketId);
+      }
+
+      await tx.transaction.update({
+        where: { id },
+        data: {
+          accountId,
+          affectsMonthlySavings: rules.impact.affectsMonthlySavings,
+          affectsNetWorth: rules.impact.affectsNetWorth,
+          affectsPersonalExpense: rules.impact.affectsPersonalExpense,
+          affectsPersonalIncome: rules.impact.affectsPersonalIncome,
+          affectsRealBalance: rules.impact.affectsRealBalance,
+          amount,
+          categoryId,
+          date,
+          description,
+          destinationAccountId,
+          weeklyBudgetImpactScope: effectiveWeeklyBudgetImpactScope,
+          savingsBucketId,
+          type
+        }
+      });
+
+      await applyBalanceDeltas(tx, rules.balanceDeltas);
+
+      if (rules.savingsBucketDelta > 0 && savingsBucketId) {
+        await adjustBucketBalance(
+          tx,
+          savingsBucketId,
+          rules.savingsBucketDelta
+        );
+      }
+
+      if (transaction.recurringOccurrence) {
+        await tx.recurringTransactionOccurrence.update({
+          where: { id: transaction.recurringOccurrence.id },
+          data: {
+            amount
+          }
+        });
       }
     });
 
-    await tx.reimbursement.update({
-      where: { id: reimbursementId },
-      data: {
-        status: "uncollectible"
+    revalidateTransactionViews();
+  }
+);
+
+export const deleteRecentTransaction = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+
+    await prisma.$transaction(async (tx) => {
+      const transaction = await getEditableTransaction(tx, id, {
+        allowConfirmedRecurring: true
+      });
+
+      await reverseEditableTransaction(tx, transaction);
+
+      if (transaction.recurringOccurrence) {
+        await tx.recurringTransactionOccurrence.update({
+          where: { id: transaction.recurringOccurrence.id },
+          data: {
+            generatedTransactionId: null,
+            status: "skipped"
+          }
+        });
       }
+
+      await tx.transaction.delete({ where: { id } });
     });
-  });
 
-  revalidateReimbursementViews();
-}
+    revalidateTransactionViews();
+  }
+);
 
-export async function createAccount(formData: FormData): Promise<void> {
+export const createReimbursableExpense = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    await createTransactionFromDraft({
+      type: "reimbursable_expense",
+      amount: parseAmount(formData.get("amount")),
+      accountId: parseRequiredString(formData.get("accountId")),
+      destinationAccountId: null,
+      categoryId: parseOptionalString(formData.get("categoryId")),
+      savingsBucketId: null,
+      description: parseRequiredString(formData.get("title")),
+      personName: parseRequiredString(formData.get("personName")),
+      notes: parseOptionalString(formData.get("notes")),
+      dueDate: parseOptionalDate(formData.get("dueDate")),
+      date: parseDateOrNow(formData.get("date")),
+      weeklyBudgetImpactScope: "normal"
+    });
+
+    revalidateReimbursementViews();
+  }
+);
+
+export const recordReimbursementPayment = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    await createTransactionFromDraft({
+      type: "reimbursement_income",
+      amount: parseAmount(formData.get("amount")),
+      accountId: parseRequiredString(formData.get("accountId")),
+      destinationAccountId: null,
+      categoryId: null,
+      savingsBucketId: null,
+      description: null,
+      reimbursementId: parseRequiredString(formData.get("reimbursementId")),
+      date: parseDateOrNow(formData.get("date")),
+      weeklyBudgetImpactScope: "normal"
+    });
+
+    revalidateReimbursementViews();
+  }
+);
+
+export const convertReimbursementToRealExpense = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const reimbursementId = parseRequiredString(
+      formData.get("reimbursementId")
+    );
+
+    await prisma.$transaction(async (tx) => {
+      await assertPeriodOpen(tx, new Date());
+      const reimbursement = await tx.reimbursement.findUnique({
+        where: { id: reimbursementId },
+        include: {
+          originalTransaction: true
+        }
+      });
+
+      if (!reimbursement) {
+        throw new Error("El pendiente no existe.");
+      }
+
+      if (!["pending", "partially_paid"].includes(reimbursement.status)) {
+        throw new Error("Este pendiente ya no se puede convertir.");
+      }
+
+      const pendingAmount = normalizeMoney(
+        toMoneyNumber(reimbursement.expectedAmount) -
+          toMoneyNumber(reimbursement.paidAmount)
+      );
+
+      if (pendingAmount <= 0) {
+        throw new Error("No queda importe pendiente por convertir.");
+      }
+
+      const rules = getConvertReimbursementToExpenseRules({
+        pendingAmount,
+        accountId: reimbursement.originalTransaction.accountId
+      });
+
+      await tx.transaction.create({
+        data: {
+          date: new Date(),
+          amount: pendingAmount,
+          type: "expense",
+          reimbursementId,
+          description: `Convertido en gasto real: ${reimbursement.title}`,
+          accountId: reimbursement.originalTransaction.accountId,
+          categoryId: reimbursement.originalTransaction.categoryId,
+          affectsRealBalance: rules.impact.affectsRealBalance,
+          affectsPersonalExpense: rules.impact.affectsPersonalExpense,
+          affectsPersonalIncome: rules.impact.affectsPersonalIncome,
+          affectsMonthlySavings: rules.impact.affectsMonthlySavings,
+          affectsNetWorth: rules.impact.affectsNetWorth
+        }
+      });
+
+      await tx.reimbursement.update({
+        where: { id: reimbursementId },
+        data: {
+          status: "uncollectible"
+        }
+      });
+    });
+
+    revalidateReimbursementViews();
+  }
+);
+
+export const createAccount = withErrorFeedback(async (formData: FormData) => {
   await requireCurrentUser();
   const name = parseRequiredString(formData.get("name"));
-  const type = parseAccountType(formData.get("type"));
+  const type = parseEnum(
+    formData.get("type"),
+    ACCOUNT_TYPES,
+    "Tipo de cuenta no válido."
+  );
   const currentBalance = parseAmountAllowingZero(
     formData.get("currentBalance")
   );
@@ -556,13 +476,17 @@ export async function createAccount(formData: FormData): Promise<void> {
   });
 
   revalidateAccountViews();
-}
+});
 
-export async function updateAccount(formData: FormData): Promise<void> {
+export const updateAccount = withErrorFeedback(async (formData: FormData) => {
   await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
   const name = parseRequiredString(formData.get("name"));
-  const type = parseAccountType(formData.get("type"));
+  const type = parseEnum(
+    formData.get("type"),
+    ACCOUNT_TYPES,
+    "Tipo de cuenta no válido."
+  );
   const currentBalance = parseAmountAllowingZero(
     formData.get("currentBalance")
   );
@@ -644,9 +568,9 @@ export async function updateAccount(formData: FormData): Promise<void> {
   });
 
   revalidateAccountViews();
-}
+});
 
-export async function deleteAccount(formData: FormData): Promise<void> {
+export const deleteAccount = withErrorFeedback(async (formData: FormData) => {
   await requireCurrentUser();
   const id = parseRequiredString(formData.get("id"));
 
@@ -702,250 +626,263 @@ export async function deleteAccount(formData: FormData): Promise<void> {
   });
 
   revalidateAccountViews();
-}
+});
 
-export async function createSavingsBucket(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const name = parseRequiredString(formData.get("name"));
-  const currentAmount = parseNonNegativeAmountAllowingZero(
-    formData.get("currentAmount")
-  );
-  const targetAmount = parseOptionalNonNegativeAmount(
-    formData.get("targetAmount")
-  );
-  const targetDate = parseOptionalDate(formData.get("targetDate"));
-  const priority = parseOptionalInteger(formData.get("priority"));
-  const notes = parseOptionalString(formData.get("notes"));
+export const createSavingsBucket = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const name = parseRequiredString(formData.get("name"));
+    const currentAmount = parseNonNegativeAmount(formData.get("currentAmount"));
+    const targetAmount = parseOptionalNonNegativeAmount(
+      formData.get("targetAmount")
+    );
+    const targetDate = parseOptionalDate(formData.get("targetDate"));
+    const priority = parseOptionalInteger(
+      formData.get("priority"),
+      "La prioridad debe ser un número entero."
+    );
+    const notes = parseOptionalString(formData.get("notes"));
 
-  await prisma.$transaction(async (tx) => {
-    const bucket = await tx.savingsBucket.create({
+    await prisma.$transaction(async (tx) => {
+      const bucket = await tx.savingsBucket.create({
+        data: {
+          name,
+          currentAmount,
+          targetAmount,
+          targetDate,
+          priority,
+          isLongTerm: false,
+          notes
+        }
+      });
+      if (currentAmount > 0) {
+        await assertPeriodOpen(tx, new Date());
+        const account = await tx.account.findFirst({
+          orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+          select: { id: true }
+        });
+        if (!account)
+          throw new Error(
+            "Crea una cuenta antes de registrar el saldo inicial de una partida."
+          );
+        await tx.transaction.create({
+          data: {
+            date: new Date(),
+            accountId: account.id,
+            savingsBucketId: bucket.id,
+            type: "savings_allocation",
+            amount: currentAmount,
+            description: "Ahorro previo asignado al crear la partida",
+            ...getDefaultTransactionImpact("savings_allocation")
+          }
+        });
+      }
+    });
+
+    revalidateSavingsViews();
+  }
+);
+
+export const updateSavingsBucket = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    const name = parseRequiredString(formData.get("name"));
+    const targetAmount = parseOptionalNonNegativeAmount(
+      formData.get("targetAmount")
+    );
+    const targetDate = parseOptionalDate(formData.get("targetDate"));
+    const priority = parseOptionalInteger(
+      formData.get("priority"),
+      "La prioridad debe ser un número entero."
+    );
+    const notes = parseOptionalString(formData.get("notes"));
+
+    await prisma.savingsBucket.update({
+      where: { id },
       data: {
         name,
-        currentAmount,
         targetAmount,
         targetDate,
         priority,
-        isLongTerm: false,
         notes
       }
     });
-    if (currentAmount > 0) {
-      await assertPeriodOpen(tx, new Date());
-      const account = await tx.account.findFirst({
-        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-        select: { id: true }
+
+    revalidateSavingsViews();
+  }
+);
+
+export const deleteSavingsBucket = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+
+    await prisma.$transaction(async (tx) => {
+      const bucket = await tx.savingsBucket.findUnique({
+        where: { id },
+        select: { isLongTerm: true }
       });
-      if (!account)
+
+      if (!bucket) {
+        throw new Error("La partida de ahorro no existe.");
+      }
+
+      if (bucket.isLongTerm) {
         throw new Error(
-          "Crea una cuenta antes de registrar el saldo inicial de una partida."
+          "La partida Largo plazo es derivada y no se puede eliminar."
         );
+      }
+
+      const relatedTransactions = await tx.transaction.count({
+        where: { savingsBucketId: id }
+      });
+      const relatedSnapshots = await tx.monthlyBucketSnapshot.count({
+        where: { savingsBucketId: id }
+      });
+      const relatedRecurringTransactions = await tx.recurringTransaction.count({
+        where: { savingsBucketId: id }
+      });
+
+      if (
+        relatedTransactions > 0 ||
+        relatedSnapshots > 0 ||
+        relatedRecurringTransactions > 0
+      ) {
+        throw new Error(
+          "No se puede eliminar una partida con movimientos o plantillas recurrentes."
+        );
+      }
+
+      await tx.savingsBucket.delete({ where: { id } });
+    });
+
+    revalidateSavingsViews();
+  }
+);
+
+export const transferBetweenSavingsBuckets = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const sourceBucketId = parseRequiredString(formData.get("sourceBucketId"));
+    const destinationBucketId = parseRequiredString(
+      formData.get("destinationBucketId")
+    );
+    const amount = parseAmount(formData.get("amount"));
+    const description = parseOptionalString(formData.get("description"));
+
+    if (sourceBucketId === destinationBucketId) {
+      throw new Error("Elige dos partidas distintas para transferir.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await assertPeriodOpen(tx, new Date());
+      const [sourceBucket, destinationBucket, defaultAccount] =
+        await Promise.all([
+          tx.savingsBucket.findUnique({
+            where: { id: sourceBucketId },
+            select: {
+              currentAmount: true,
+              id: true,
+              isLongTerm: true,
+              name: true
+            }
+          }),
+          tx.savingsBucket.findUnique({
+            where: { id: destinationBucketId },
+            select: {
+              id: true,
+              isLongTerm: true,
+              name: true
+            }
+          }),
+          tx.account.findFirst({
+            orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+            select: { id: true }
+          })
+        ]);
+
+      if (!sourceBucket || !destinationBucket) {
+        throw new Error("La partida de ahorro seleccionada no existe.");
+      }
+
+      if (sourceBucket.isLongTerm || destinationBucket.isLongTerm) {
+        throw new Error(
+          "La partida de largo plazo se calcula desde cuentas y no admite transferencias manuales."
+        );
+      }
+
+      if (!defaultAccount) {
+        throw new Error(
+          "No hay cuenta disponible para registrar la transferencia."
+        );
+      }
+
+      if (amount > toMoneyNumber(sourceBucket.currentAmount)) {
+        throw new Error("No hay suficiente saldo en la partida de origen.");
+      }
+
+      const savingsTransferId = randomUUID();
+      const date = new Date();
+      const withdrawalImpact =
+        getDefaultTransactionImpact("savings_withdrawal");
+      const allocationImpact =
+        getDefaultTransactionImpact("savings_allocation");
+      const transferDescription =
+        description ??
+        `Transferencia entre partidas: ${sourceBucket.name} -> ${destinationBucket.name}`;
+
+      await adjustBucketBalance(tx, sourceBucket.id, -amount);
+
+      await adjustBucketBalance(tx, destinationBucket.id, amount);
+
       await tx.transaction.create({
         data: {
-          date: new Date(),
-          accountId: account.id,
-          savingsBucketId: bucket.id,
-          type: "savings_allocation",
-          amount: currentAmount,
-          description: "Ahorro previo asignado al crear la partida",
-          ...getDefaultTransactionImpact("savings_allocation")
+          date,
+          savingsTransferId,
+          amount,
+          type: "savings_withdrawal",
+          description: transferDescription,
+          accountId: defaultAccount.id,
+          savingsBucketId: sourceBucket.id,
+          affectsRealBalance: withdrawalImpact.affectsRealBalance,
+          affectsPersonalExpense: withdrawalImpact.affectsPersonalExpense,
+          affectsPersonalIncome: withdrawalImpact.affectsPersonalIncome,
+          affectsMonthlySavings: withdrawalImpact.affectsMonthlySavings,
+          affectsNetWorth: withdrawalImpact.affectsNetWorth
         }
       });
-    }
-  });
 
-  revalidateSavingsViews();
-}
-
-export async function updateSavingsBucket(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  const name = parseRequiredString(formData.get("name"));
-  const targetAmount = parseOptionalNonNegativeAmount(
-    formData.get("targetAmount")
-  );
-  const targetDate = parseOptionalDate(formData.get("targetDate"));
-  const priority = parseOptionalInteger(formData.get("priority"));
-  const notes = parseOptionalString(formData.get("notes"));
-
-  await prisma.savingsBucket.update({
-    where: { id },
-    data: {
-      name,
-      targetAmount,
-      targetDate,
-      priority,
-      notes
-    }
-  });
-
-  revalidateSavingsViews();
-}
-
-export async function deleteSavingsBucket(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-
-  await prisma.$transaction(async (tx) => {
-    const bucket = await tx.savingsBucket.findUnique({
-      where: { id },
-      select: { isLongTerm: true }
+      await tx.transaction.create({
+        data: {
+          date,
+          savingsTransferId,
+          amount,
+          type: "savings_allocation",
+          description: transferDescription,
+          accountId: defaultAccount.id,
+          savingsBucketId: destinationBucket.id,
+          affectsRealBalance: allocationImpact.affectsRealBalance,
+          affectsPersonalExpense: allocationImpact.affectsPersonalExpense,
+          affectsPersonalIncome: allocationImpact.affectsPersonalIncome,
+          affectsMonthlySavings: allocationImpact.affectsMonthlySavings,
+          affectsNetWorth: allocationImpact.affectsNetWorth
+        }
+      });
     });
 
-    if (!bucket) {
-      throw new Error("La partida de ahorro no existe.");
-    }
-
-    if (bucket.isLongTerm) {
-      throw new Error(
-        "La partida Largo plazo es derivada y no se puede eliminar."
-      );
-    }
-
-    const relatedTransactions = await tx.transaction.count({
-      where: { savingsBucketId: id }
-    });
-    const relatedSnapshots = await tx.monthlyBucketSnapshot.count({
-      where: { savingsBucketId: id }
-    });
-    const relatedRecurringTransactions = await tx.recurringTransaction.count({
-      where: { savingsBucketId: id }
-    });
-
-    if (
-      relatedTransactions > 0 ||
-      relatedSnapshots > 0 ||
-      relatedRecurringTransactions > 0
-    ) {
-      throw new Error(
-        "No se puede eliminar una partida con movimientos o plantillas recurrentes."
-      );
-    }
-
-    await tx.savingsBucket.delete({ where: { id } });
-  });
-
-  revalidateSavingsViews();
-}
-
-export async function transferBetweenSavingsBuckets(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const sourceBucketId = parseRequiredString(formData.get("sourceBucketId"));
-  const destinationBucketId = parseRequiredString(
-    formData.get("destinationBucketId")
-  );
-  const amount = parseAmount(formData.get("amount"));
-  const description = parseOptionalString(formData.get("description"));
-
-  if (sourceBucketId === destinationBucketId) {
-    throw new Error("Elige dos partidas distintas para transferir.");
+    revalidateSavingsViews();
   }
+);
 
-  await prisma.$transaction(async (tx) => {
-    await assertPeriodOpen(tx, new Date());
-    const [sourceBucket, destinationBucket, defaultAccount] = await Promise.all(
-      [
-        tx.savingsBucket.findUnique({
-          where: { id: sourceBucketId },
-          select: {
-            currentAmount: true,
-            id: true,
-            isLongTerm: true,
-            name: true
-          }
-        }),
-        tx.savingsBucket.findUnique({
-          where: { id: destinationBucketId },
-          select: {
-            id: true,
-            isLongTerm: true,
-            name: true
-          }
-        }),
-        tx.account.findFirst({
-          orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-          select: { id: true }
-        })
-      ]
-    );
-
-    if (!sourceBucket || !destinationBucket) {
-      throw new Error("La partida de ahorro seleccionada no existe.");
-    }
-
-    if (sourceBucket.isLongTerm || destinationBucket.isLongTerm) {
-      throw new Error(
-        "La partida de largo plazo se calcula desde cuentas y no admite transferencias manuales."
-      );
-    }
-
-    if (!defaultAccount) {
-      throw new Error(
-        "No hay cuenta disponible para registrar la transferencia."
-      );
-    }
-
-    if (amount > toMoneyNumber(sourceBucket.currentAmount)) {
-      throw new Error("No hay suficiente saldo en la partida de origen.");
-    }
-
-    const savingsTransferId = randomUUID();
-    const date = new Date();
-    const withdrawalImpact = getDefaultTransactionImpact("savings_withdrawal");
-    const allocationImpact = getDefaultTransactionImpact("savings_allocation");
-    const transferDescription =
-      description ??
-      `Transferencia entre partidas: ${sourceBucket.name} -> ${destinationBucket.name}`;
-
-    await adjustBucketBalance(tx, sourceBucket.id, -amount);
-
-    await adjustBucketBalance(tx, destinationBucket.id, amount);
-
-    await tx.transaction.create({
-      data: {
-        date,
-        savingsTransferId,
-        amount,
-        type: "savings_withdrawal",
-        description: transferDescription,
-        accountId: defaultAccount.id,
-        savingsBucketId: sourceBucket.id,
-        affectsRealBalance: withdrawalImpact.affectsRealBalance,
-        affectsPersonalExpense: withdrawalImpact.affectsPersonalExpense,
-        affectsPersonalIncome: withdrawalImpact.affectsPersonalIncome,
-        affectsMonthlySavings: withdrawalImpact.affectsMonthlySavings,
-        affectsNetWorth: withdrawalImpact.affectsNetWorth
-      }
-    });
-
-    await tx.transaction.create({
-      data: {
-        date,
-        savingsTransferId,
-        amount,
-        type: "savings_allocation",
-        description: transferDescription,
-        accountId: defaultAccount.id,
-        savingsBucketId: destinationBucket.id,
-        affectsRealBalance: allocationImpact.affectsRealBalance,
-        affectsPersonalExpense: allocationImpact.affectsPersonalExpense,
-        affectsPersonalIncome: allocationImpact.affectsPersonalIncome,
-        affectsMonthlySavings: allocationImpact.affectsMonthlySavings,
-        affectsNetWorth: allocationImpact.affectsNetWorth
-      }
-    });
-  });
-
-  revalidateSavingsViews();
-}
-
-export async function undoSavingsTransfer(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("savingsTransferId"));
-  await prisma.$transaction((tx) => undoSavingsTransferInTransaction(tx, id));
-  revalidateSavingsViews();
-}
+export const undoSavingsTransfer = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("savingsTransferId"));
+    await prisma.$transaction((tx) => undoSavingsTransferInTransaction(tx, id));
+    revalidateSavingsViews();
+  }
+);
 
 export async function closeMonth(
   _previousState: MonthlyCloseFormState,
@@ -1043,9 +980,11 @@ export async function closeMonth(
           throw new Error(
             "Han cambiado los movimientos del mes. Recarga el cierre antes de confirmar los saldos."
           );
-        const difference = roundMoney(realBalance - calculatedBalance);
-        const adjustmentKind = parseMonthlyCloseAdjustmentKind(
-          formData.get(`adjustmentKind_${account.id}`)
+        const difference = normalizeMoney(realBalance - calculatedBalance);
+        const adjustmentKind = parseEnum(
+          formData.get(`adjustmentKind_${account.id}`),
+          MONTHLY_CLOSE_ADJUSTMENT_KINDS,
+          "Tipo de ajuste de cierre no válido."
         );
 
         accountSnapshots.push({
@@ -1360,136 +1299,133 @@ export async function closeMonth(
   } catch (error) {
     return {
       status: "error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "No se pudo guardar el cierre mensual."
+      message: getActionErrorMessage(error)
     };
   }
 }
 
-export async function undoLatestMonthlyClose(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const closeId = parseRequiredString(formData.get("closeId"));
-  const returnTo = parseUndoReturnTo(formData.get("returnTo"));
+export const undoLatestMonthlyClose = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const closeId = parseRequiredString(formData.get("closeId"));
+    const returnTo = parseUndoReturnTo(formData.get("returnTo"));
 
-  await prisma.$transaction(async (tx) => {
-    const close = await tx.monthlyClose.findUnique({
-      where: { id: closeId },
-      include: {
-        accountSnapshots: {
-          select: {
-            adjustmentTransactionId: true,
-            accountId: true,
-            difference: true
-          }
-        },
-        generatedTransactions: {
-          select: {
-            amount: true,
-            id: true,
-            savingsBucketId: true,
-            type: true
+    await prisma.$transaction(async (tx) => {
+      const close = await tx.monthlyClose.findUnique({
+        where: { id: closeId },
+        include: {
+          accountSnapshots: {
+            select: {
+              adjustmentTransactionId: true,
+              accountId: true,
+              difference: true
+            }
+          },
+          generatedTransactions: {
+            select: {
+              amount: true,
+              id: true,
+              savingsBucketId: true,
+              type: true
+            }
           }
         }
-      }
-    });
-
-    if (!close) {
-      throw new Error("El cierre mensual no existe.");
-    }
-
-    const latestClose = await tx.monthlyClose.findFirst({
-      orderBy: [{ year: "desc" }, { month: "desc" }],
-      select: { id: true }
-    });
-
-    if (!latestClose || latestClose.id !== close.id) {
-      throw new Error("Solo se puede deshacer el último cierre mensual.");
-    }
-
-    const bucketDeltas = new Map<string, number>();
-    for (const transaction of close.generatedTransactions) {
-      if (!transaction.savingsBucketId) continue;
-      const delta =
-        transaction.type === "savings_allocation"
-          ? -toMoneyNumber(transaction.amount)
-          : transaction.type === "savings_withdrawal"
-            ? toMoneyNumber(transaction.amount)
-            : 0;
-      bucketDeltas.set(
-        transaction.savingsBucketId,
-        normalizeMoney(
-          (bucketDeltas.get(transaction.savingsBucketId) ?? 0) + delta
-        )
-      );
-    }
-    for (const [id, delta] of bucketDeltas) {
-      const bucket = await tx.savingsBucket.findUniqueOrThrow({
-        where: { id }
       });
-      if (normalizeMoney(toMoneyNumber(bucket.currentAmount) + delta) < 0)
-        throw new Error(
-          `Devuelve primero el dinero utilizado de la partida ${bucket.name} para reabrir este cierre.`
+
+      if (!close) {
+        throw new Error("El cierre mensual no existe.");
+      }
+
+      const latestClose = await tx.monthlyClose.findFirst({
+        orderBy: [{ year: "desc" }, { month: "desc" }],
+        select: { id: true }
+      });
+
+      if (!latestClose || latestClose.id !== close.id) {
+        throw new Error("Solo se puede deshacer el último cierre mensual.");
+      }
+
+      const bucketDeltas = new Map<string, number>();
+      for (const transaction of close.generatedTransactions) {
+        if (!transaction.savingsBucketId) continue;
+        const delta =
+          transaction.type === "savings_allocation"
+            ? -toMoneyNumber(transaction.amount)
+            : transaction.type === "savings_withdrawal"
+              ? toMoneyNumber(transaction.amount)
+              : 0;
+        bucketDeltas.set(
+          transaction.savingsBucketId,
+          normalizeMoney(
+            (bucketDeltas.get(transaction.savingsBucketId) ?? 0) + delta
+          )
         );
-    }
-
-    for (const snapshot of close.accountSnapshots) {
-      const difference = toMoneyNumber(snapshot.difference);
-
-      if (difference === 0) {
-        continue;
+      }
+      for (const [id, delta] of bucketDeltas) {
+        const bucket = await tx.savingsBucket.findUniqueOrThrow({
+          where: { id }
+        });
+        if (normalizeMoney(toMoneyNumber(bucket.currentAmount) + delta) < 0)
+          throw new Error(
+            `Devuelve primero el dinero utilizado de la partida ${bucket.name} para reabrir este cierre.`
+          );
       }
 
-      await adjustAccountBalance(tx, snapshot.accountId, -difference);
-    }
+      for (const snapshot of close.accountSnapshots) {
+        const difference = toMoneyNumber(snapshot.difference);
 
-    for (const transaction of close.generatedTransactions) {
-      if (!transaction.savingsBucketId) {
-        continue;
-      }
-
-      const amount = toMoneyNumber(transaction.amount);
-
-      if (transaction.type === "savings_allocation") {
-        await adjustBucketBalance(tx, transaction.savingsBucketId, -amount);
-      }
-
-      if (transaction.type === "savings_withdrawal") {
-        await adjustBucketBalance(tx, transaction.savingsBucketId, amount);
-      }
-    }
-
-    const generatedTransactionIds = new Set(
-      close.generatedTransactions.map((transaction) => transaction.id)
-    );
-
-    for (const snapshot of close.accountSnapshots) {
-      if (snapshot.adjustmentTransactionId) {
-        generatedTransactionIds.add(snapshot.adjustmentTransactionId);
-      }
-    }
-
-    if (generatedTransactionIds.size > 0) {
-      await tx.transaction.deleteMany({
-        where: {
-          id: {
-            in: Array.from(generatedTransactionIds)
-          }
+        if (difference === 0) {
+          continue;
         }
+
+        await adjustAccountBalance(tx, snapshot.accountId, -difference);
+      }
+
+      for (const transaction of close.generatedTransactions) {
+        if (!transaction.savingsBucketId) {
+          continue;
+        }
+
+        const amount = toMoneyNumber(transaction.amount);
+
+        if (transaction.type === "savings_allocation") {
+          await adjustBucketBalance(tx, transaction.savingsBucketId, -amount);
+        }
+
+        if (transaction.type === "savings_withdrawal") {
+          await adjustBucketBalance(tx, transaction.savingsBucketId, amount);
+        }
+      }
+
+      const generatedTransactionIds = new Set(
+        close.generatedTransactions.map((transaction) => transaction.id)
+      );
+
+      for (const snapshot of close.accountSnapshots) {
+        if (snapshot.adjustmentTransactionId) {
+          generatedTransactionIds.add(snapshot.adjustmentTransactionId);
+        }
+      }
+
+      if (generatedTransactionIds.size > 0) {
+        await tx.transaction.deleteMany({
+          where: {
+            id: {
+              in: Array.from(generatedTransactionIds)
+            }
+          }
+        });
+      }
+
+      await tx.monthlyClose.delete({
+        where: { id: close.id }
       });
-    }
-
-    await tx.monthlyClose.delete({
-      where: { id: close.id }
     });
-  });
 
-  revalidateMonthlyCloseViews();
-  redirect(returnTo);
-}
+    revalidateMonthlyCloseViews();
+    redirect(returnTo);
+  }
+);
 
 type EditableTransaction = Prisma.TransactionGetPayload<{
   include: {
@@ -1592,7 +1528,7 @@ async function reverseEditableTransaction(
 }
 
 function parseCloseMonth(value: FormDataEntryValue | null): number {
-  const parsedValue = parseIntegerField(value, "Mes no válido.");
+  const parsedValue = parseInteger(value, "Mes no válido.");
 
   if (parsedValue < 1 || parsedValue > 12) {
     throw new Error("Mes no válido.");
@@ -1602,7 +1538,7 @@ function parseCloseMonth(value: FormDataEntryValue | null): number {
 }
 
 function parseCloseYear(value: FormDataEntryValue | null): number {
-  const parsedValue = parseIntegerField(value, "Año no válido.");
+  const parsedValue = parseInteger(value, "Año no válido.");
 
   if (parsedValue < 2000 || parsedValue > 2100) {
     throw new Error("Año no válido.");
@@ -1625,38 +1561,6 @@ function parseUndoReturnTo(value: FormDataEntryValue | null): string {
   }
 
   return "/history";
-}
-
-function parseIntegerField(
-  value: FormDataEntryValue | null,
-  errorMessage: string
-): number {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(errorMessage);
-  }
-
-  const parsedValue = Number(value);
-
-  if (!Number.isInteger(parsedValue)) {
-    throw new Error(errorMessage);
-  }
-
-  return parsedValue;
-}
-
-function parseMonthlyCloseAdjustmentKind(
-  value: FormDataEntryValue | null
-): MonthlyCloseAdjustmentKind {
-  if (
-    typeof value !== "string" ||
-    !VALID_MONTHLY_CLOSE_ADJUSTMENT_KINDS.has(
-      value as MonthlyCloseAdjustmentKind
-    )
-  ) {
-    throw new Error("Tipo de ajuste de cierre no válido.");
-  }
-
-  return value as MonthlyCloseAdjustmentKind;
 }
 
 function getMonthlyCloseAdjustmentImpact(
@@ -1730,27 +1634,14 @@ function validateAdjustmentDirection(
   }
 }
 
-function roundMoney(value: number): number {
-  return normalizeMoney(value);
-}
-
-function parseTransactionType(
-  value: FormDataEntryValue | null
-): QuickTransactionType {
-  if (
-    typeof value !== "string" ||
-    !VALID_QUICK_TRANSACTION_TYPES.has(value as QuickTransactionType)
-  ) {
-    throw new Error("Tipo de movimiento no válido.");
-  }
-
-  return value as QuickTransactionType;
-}
-
 function parseEditableTransactionType(
   value: FormDataEntryValue | null
 ): QuickTransactionType {
-  const type = parseTransactionType(value);
+  const type = parseEnum(
+    value,
+    QUICK_TRANSACTION_TYPES,
+    "Tipo de movimiento no válido."
+  );
 
   if (!EDITABLE_TRANSACTION_TYPES.has(type)) {
     throw new Error(
@@ -1764,18 +1655,13 @@ function parseEditableTransactionType(
 function parseWeeklyBudgetImpactScope(
   value: FormDataEntryValue | null
 ): WeeklyBudgetImpactScope {
-  if (value == null || value === "") {
-    return "normal";
-  }
-
-  if (
-    typeof value !== "string" ||
-    !WEEKLY_BUDGET_IMPACT_SCOPES.has(value as WeeklyBudgetImpactScope)
-  ) {
-    throw new Error("Impacto en objetivo semanal no válido.");
-  }
-
-  return value as WeeklyBudgetImpactScope;
+  return parseOptionalString(value) === null
+    ? "normal"
+    : parseEnum(
+        value,
+        WEEKLY_BUDGET_IMPACT_SCOPES,
+        "Impacto en objetivo semanal no válido."
+      );
 }
 
 function normalizeWeeklyBudgetImpactScope(
@@ -1798,187 +1684,6 @@ function normalizeWeeklyBudgetImpactScope(
   }
 
   return "normal";
-}
-
-function parseAmount(value: FormDataEntryValue | null): number {
-  if (typeof value !== "string") {
-    throw new Error("Introduce un importe.");
-  }
-
-  const amount = parseMoneyInput(value);
-
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("El importe debe ser mayor que cero.");
-  }
-
-  return amount;
-}
-
-function parseAmountAllowingZero(value: FormDataEntryValue | null): number {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return 0;
-  }
-
-  const amount = parseMoneyInput(value);
-
-  if (!Number.isFinite(amount)) {
-    throw new Error("El importe debe ser un número válido.");
-  }
-
-  return amount;
-}
-
-function parseNonNegativeAmountAllowingZero(
-  value: FormDataEntryValue | null
-): number {
-  const amount = parseAmountAllowingZero(value);
-
-  if (amount < 0) {
-    throw new Error("El importe no puede ser negativo.");
-  }
-
-  return amount;
-}
-
-function parseOptionalNonNegativeAmount(
-  value: FormDataEntryValue | null
-): number | null {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  const amount = parseNonNegativeAmountAllowingZero(value);
-
-  return amount;
-}
-
-function parseOptionalInteger(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  const parsedValue = Number(value);
-
-  if (!Number.isInteger(parsedValue)) {
-    throw new Error("La prioridad debe ser un número entero.");
-  }
-
-  return parsedValue;
-}
-
-function parseCheckbox(value: FormDataEntryValue | null): boolean {
-  return value === "on";
-}
-
-function parseAccountType(value: FormDataEntryValue | null): AccountType {
-  if (
-    typeof value !== "string" ||
-    !VALID_ACCOUNT_TYPES.has(value as AccountType)
-  ) {
-    throw new Error("Tipo de cuenta no válido.");
-  }
-
-  return value as AccountType;
-}
-
-function parseRequiredString(value: FormDataEntryValue | null): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error("Faltan datos obligatorios.");
-  }
-
-  return value.trim();
-}
-
-function parseOptionalString(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  return value.trim();
-}
-
-function parseTransactionDate(value: FormDataEntryValue | null): Date {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return new Date();
-  }
-
-  const date = new Date(`${value}T12:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    throw new Error("Fecha no válida.");
-  }
-
-  return date;
-}
-
-function parseOptionalDate(value: FormDataEntryValue | null): Date | null {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  return parseTransactionDate(value);
-}
-
-async function assertAccountExists(
-  tx: Prisma.TransactionClient,
-  accountId: string
-): Promise<void> {
-  const account = await tx.account.findUnique({
-    where: { id: accountId },
-    select: { id: true }
-  });
-
-  if (!account) {
-    throw new Error("La cuenta seleccionada no existe.");
-  }
-}
-
-async function assertCategoryMatchesType(
-  tx: Prisma.TransactionClient,
-  categoryId: string,
-  type: "expense" | "income"
-): Promise<void> {
-  const category = await tx.category.findUnique({
-    where: { id: categoryId },
-    select: { type: true }
-  });
-
-  if (!category) {
-    throw new Error("La categoría seleccionada no existe.");
-  }
-
-  if (category.type !== "both" && category.type !== type) {
-    throw new Error("La categoría no corresponde al tipo de movimiento.");
-  }
-}
-
-async function assertEditableSavingsBucketExists(
-  tx: Prisma.TransactionClient,
-  savingsBucketId: string
-): Promise<void> {
-  const bucket = await tx.savingsBucket.findUnique({
-    where: { id: savingsBucketId },
-    select: { id: true, isLongTerm: true }
-  });
-
-  if (!bucket) {
-    throw new Error("La partida de ahorro no existe.");
-  }
-
-  if (bucket.isLongTerm) {
-    throw new Error(
-      "La partida Largo plazo se calcula desde cuentas y no admite asignaciones manuales."
-    );
-  }
-}
-
-async function applyBalanceDeltas(
-  tx: Prisma.TransactionClient,
-  balanceDeltas: Array<{ accountId: string; delta: number }>
-): Promise<void> {
-  for (const balanceDelta of balanceDeltas) {
-    await adjustAccountBalance(tx, balanceDelta.accountId, balanceDelta.delta);
-  }
 }
 
 function revalidateReimbursementViews(): void {

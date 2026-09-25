@@ -74,10 +74,12 @@ export async function generateRecurringOccurrencesForMonth(
             );
             if (existing && existing.status !== "pending") continue;
             const occurrence = existing
-              ? await tx.recurringTransactionOccurrence.update({
-                  where: { id: existing.id },
-                  data: { amount: template.amount }
-                })
+              ? existing.amount.equals(template.amount)
+                ? existing
+                : await tx.recurringTransactionOccurrence.update({
+                    where: { id: existing.id },
+                    data: { amount: template.amount }
+                  })
               : await tx.recurringTransactionOccurrence.create({
                   data: {
                     recurringTransactionId: template.id,
@@ -94,12 +96,13 @@ export async function generateRecurringOccurrencesForMonth(
               await confirmRecurringOccurrenceInTransaction(tx, occurrence.id);
             }
           }
-        await tx.recurringTransaction.update({
-          where: { id: template.id },
-          data: {
-            lastGeneratedMonth: `${year}-${String(month).padStart(2, "0")}`
-          }
-        });
+        // The worker runs every minute: skip the write when nothing changed.
+        const generatedMonth = `${year}-${String(month).padStart(2, "0")}`;
+        if (template.lastGeneratedMonth !== generatedMonth)
+          await tx.recurringTransaction.update({
+            where: { id: template.id },
+            data: { lastGeneratedMonth: generatedMonth }
+          });
       });
     } catch (error) {
       if (

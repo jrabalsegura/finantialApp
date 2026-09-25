@@ -1,184 +1,153 @@
 "use server";
-import { requireCurrentUser } from "@/lib/auth";
 
-
-import type { QuickTransactionTemplateType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { QUICK_TRANSACTION_TYPES } from "@/domain/domain-options";
+import { withErrorFeedback } from "@/lib/action-feedback";
+import { requireCurrentUser } from "@/lib/auth";
+import {
+  parseAmount,
+  parseCheckbox,
+  parseEnum,
+  parseOptionalInteger,
+  parseOptionalString,
+  parseRequiredString
+} from "@/lib/form-data";
+import { prisma } from "@/lib/prisma";
 import {
   createQuickTemplate,
   updateQuickTemplate,
   type QuickTemplateInput
 } from "@/lib/quick-transaction-templates";
-import { QUICK_TRANSACTION_TYPES } from "@/domain/domain-options";
-import { parseMoneyInput } from "@/domain/money";
-import { prisma } from "@/lib/prisma";
 
-const VALID_TYPES = new Set<QuickTransactionTemplateType>(
-  QUICK_TRANSACTION_TYPES
+export const createQuickTemplateAction = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    await createQuickTemplate(parseTemplateForm(formData));
+    revalidateQuickTemplateViews();
+  }
 );
 
-export async function createQuickTemplateAction(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  await createQuickTemplate(parseTemplateForm(formData));
-  revalidateQuickTemplateViews();
-}
-
-export async function updateQuickTemplateAction(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  await updateQuickTemplate(id, parseTemplateForm(formData));
-  revalidateQuickTemplateViews();
-}
-
-export async function toggleQuickTemplateActive(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  const isActive = formData.get("isActive") === "true";
-  await prisma.quickTransactionTemplate.update({
-    where: { id },
-    data: { isActive }
-  });
-  revalidateQuickTemplateViews();
-}
-
-export async function toggleQuickTemplateFavorite(
-  formData: FormData
-): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  const isFavorite = formData.get("isFavorite") === "true";
-  await prisma.quickTransactionTemplate.update({
-    where: { id },
-    data: { isFavorite }
-  });
-  revalidateQuickTemplateViews();
-}
-
-export async function moveQuickTemplate(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  const direction = formData.get("direction");
-  if (direction !== "up" && direction !== "down") {
-    throw new Error("Dirección de orden no válida.");
+export const updateQuickTemplateAction = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    await updateQuickTemplate(id, parseTemplateForm(formData));
+    revalidateQuickTemplateViews();
   }
+);
 
-  await prisma.$transaction(async (tx) => {
-    const templates = await tx.quickTransactionTemplate.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { id: true, sortOrder: true }
+export const toggleQuickTemplateActive = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    const isActive = formData.get("isActive") === "true";
+    await prisma.quickTransactionTemplate.update({
+      where: { id },
+      data: { isActive }
     });
-    const index = templates.findIndex((template) => template.id === id);
-    const otherIndex = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || otherIndex < 0 || otherIndex >= templates.length) return;
+    revalidateQuickTemplateViews();
+  }
+);
 
-    const current = templates[index];
-    const other = templates[otherIndex];
-    const currentOrder =
-      current.sortOrder === other.sortOrder ? index : current.sortOrder;
-    const otherOrder =
-      current.sortOrder === other.sortOrder ? otherIndex : other.sortOrder;
-
-    await tx.quickTransactionTemplate.update({
-      where: { id: current.id },
-      data: { sortOrder: otherOrder }
+export const toggleQuickTemplateFavorite = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    const isFavorite = formData.get("isFavorite") === "true";
+    await prisma.quickTransactionTemplate.update({
+      where: { id },
+      data: { isFavorite }
     });
-    await tx.quickTransactionTemplate.update({
-      where: { id: other.id },
-      data: { sortOrder: currentOrder }
+    revalidateQuickTemplateViews();
+  }
+);
+
+export const moveQuickTemplate = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    const direction = formData.get("direction");
+    if (direction !== "up" && direction !== "down") {
+      throw new Error("Dirección de orden no válida.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const templates = await tx.quickTransactionTemplate.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: { id: true, sortOrder: true }
+      });
+      const index = templates.findIndex((template) => template.id === id);
+      const otherIndex = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || otherIndex < 0 || otherIndex >= templates.length) return;
+
+      const current = templates[index];
+      const other = templates[otherIndex];
+      const currentOrder =
+        current.sortOrder === other.sortOrder ? index : current.sortOrder;
+      const otherOrder =
+        current.sortOrder === other.sortOrder ? otherIndex : other.sortOrder;
+
+      await tx.quickTransactionTemplate.update({
+        where: { id: current.id },
+        data: { sortOrder: otherOrder }
+      });
+      await tx.quickTransactionTemplate.update({
+        where: { id: other.id },
+        data: { sortOrder: currentOrder }
+      });
     });
-  });
 
-  revalidateQuickTemplateViews();
-}
+    revalidateQuickTemplateViews();
+  }
+);
 
-export async function deleteQuickTemplate(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const id = parseRequiredString(formData.get("id"));
-  await prisma.quickTransactionTemplate.delete({ where: { id } });
-  revalidateQuickTemplateViews();
-}
+export const deleteQuickTemplate = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const id = parseRequiredString(formData.get("id"));
+    await prisma.quickTransactionTemplate.delete({ where: { id } });
+    revalidateQuickTemplateViews();
+  }
+);
 
 function parseTemplateForm(formData: FormData): QuickTemplateInput {
-  const type = parseType(formData.get("type"));
+  const type = parseEnum(
+    formData.get("type"),
+    QUICK_TRANSACTION_TYPES,
+    "Tipo de plantilla no válido."
+  );
   const accountId = parseOptionalString(formData.get("accountId"));
 
   return {
     name: parseRequiredString(formData.get("name")),
     type,
-    defaultAmount: parseOptionalAmount(formData.get("defaultAmount")),
+    defaultAmount: parseOptionalString(formData.get("defaultAmount"))
+      ? parseAmount(formData.get("defaultAmount"))
+      : null,
     accountId,
     destinationAccountId:
       type === "transfer"
         ? parseRequiredString(formData.get("destinationAccountId"))
         : null,
     categoryId:
-      type === "expense" ||
-      type === "income" ||
-      type === "reimbursable_expense"
+      type === "expense" || type === "income" || type === "reimbursable_expense"
         ? parseOptionalString(formData.get("categoryId"))
         : null,
     savingsBucketId:
       type === "savings_allocation"
         ? parseRequiredString(formData.get("savingsBucketId"))
         : null,
-    defaultDescription: parseOptionalString(
-      formData.get("defaultDescription")
-    ),
+    defaultDescription: parseOptionalString(formData.get("defaultDescription")),
     icon: parseOptionalString(formData.get("icon")),
     color: parseOptionalString(formData.get("color")),
-    sortOrder: parseInteger(formData.get("sortOrder"), 0),
-    isFavorite: formData.get("isFavorite") === "on",
-    isActive: formData.get("isActive") === "on"
+    sortOrder:
+      parseOptionalInteger(
+        formData.get("sortOrder"),
+        "El orden no es válido."
+      ) ?? 0,
+    isFavorite: parseCheckbox(formData.get("isFavorite")),
+    isActive: parseCheckbox(formData.get("isActive"))
   };
-}
-
-function parseType(
-  value: FormDataEntryValue | null
-): QuickTransactionTemplateType {
-  if (
-    typeof value !== "string" ||
-    !VALID_TYPES.has(value as QuickTransactionTemplateType)
-  ) {
-    throw new Error("Tipo de plantilla no válido.");
-  }
-  return value as QuickTransactionTemplateType;
-}
-
-function parseOptionalAmount(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string" || value.trim() === "") return null;
-  const amount = parseMoneyInput(value);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("El importe por defecto debe ser mayor que cero.");
-  }
-  return amount;
-}
-
-function parseInteger(
-  value: FormDataEntryValue | null,
-  fallback: number
-): number {
-  if (typeof value !== "string" || value.trim() === "") return fallback;
-  const result = Number(value);
-  if (!Number.isInteger(result)) throw new Error("El orden no es válido.");
-  return result;
-}
-
-function parseRequiredString(value: FormDataEntryValue | null): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error("Faltan datos obligatorios.");
-  }
-  return value.trim();
-}
-
-function parseOptionalString(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string" || value.trim() === "") return null;
-  return value.trim();
 }
 
 function revalidateQuickTemplateViews(): void {

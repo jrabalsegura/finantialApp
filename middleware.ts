@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
 import {
   createSessionToken,
   getSessionCookieOptions,
@@ -26,14 +27,25 @@ export async function middleware(request: NextRequest) {
     request.cookies.get(SESSION_COOKIE_NAME)?.value
   );
 
-  if (session) {
+  // Node runtime lets the middleware check the DB, so a password change or a
+  // deleted user revokes existing cookies on the very next request.
+  const user = session
+    ? await prisma.appUser.findUnique({
+        where: { id: session.userId },
+        select: { sessionVersion: true }
+      })
+    : null;
+
+  if (session && user && user.sessionVersion === session.sessionVersion) {
     const response = NextResponse.next();
     const durationSeconds = normalizeSessionDuration(
       session.durationSeconds ?? SESSION_DURATION_SECONDS
     );
     const refreshedToken = await createSessionToken(
       session.userId,
-      durationSeconds
+      durationSeconds,
+      undefined,
+      session.sessionVersion
     );
 
     response.cookies.set(
@@ -45,6 +57,13 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "Inicia sesión para continuar." },
+      { status: 401 }
+    );
+  }
+
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("next", `${pathname}${search}`);
 
@@ -52,7 +71,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!.*\\..*).*)", "/api/:path*"]
+  runtime: "nodejs",
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
 };
 
 function isPublicPath(pathname: string): boolean {

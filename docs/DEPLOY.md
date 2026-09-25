@@ -12,7 +12,7 @@ La plantilla de nginx usa el nombre confirmado
 
 ```text
 Mac:
-navegador -> 127.0.0.1:3080 -> contenedor Next.js
+navegador -> 127.0.0.1:3081 -> contenedor Next.js
                                       |
                             ./.container-data/financial.db
 
@@ -34,7 +34,7 @@ Requisitos:
 
 - Docker Desktop iniciado;
 - `node`, `npm`, `curl` y `sqlite3`;
-- el puerto `127.0.0.1:3080` libre.
+- el puerto `127.0.0.1:3081` libre.
 
 Comprobar primero el proyecto fuera de contenedores:
 
@@ -73,7 +73,7 @@ make container-import-db
 Abrir la aplicación:
 
 ```text
-http://127.0.0.1:3080
+http://127.0.0.1:3081
 ```
 
 El smoke test comprueba el endpoint público `/api/health`, una consulta real a
@@ -93,8 +93,8 @@ make container-down
 Se puede cambiar el puerto en todos los objetivos:
 
 ```bash
-make container-up FINANCIAL_APP_HTTP_PORT=3081
-make container-check FINANCIAL_APP_HTTP_PORT=3081
+make container-up FINANCIAL_APP_HTTP_PORT=3082
+make container-check FINANCIAL_APP_HTTP_PORT=3082
 ```
 
 ## 2. Preparar el cambio en el Mac
@@ -477,56 +477,25 @@ sustituye a una copia externa cifrada.
 
 ## 12. Actualizaciones
 
-Antes de cada actualización:
+Desde el Mac, con `main` limpio y publicado en GitHub:
 
 ```bash
-ssh remote
-sudo systemctl start financial-app-backup.service
-
-cd /var/www/financial-app
-git status --short
-git pull --ff-only origin main
-release=$(git rev-parse --short=12 HEAD)
+make check          # typecheck, tests y build
+make container-up   # prueba local con Docker Desktop
+make container-check
+make deploy         # pide la contraseña de sudo del servidor
 ```
 
-Un `git status --short` no vacío debe investigarse. Construye la nueva imagen
-sin tocar el servicio actual:
+`make deploy` se conecta a `remote`, hace `git pull --ff-only origin main` en
+`/var/www/financial-app` y ejecuta
+[`deploy/scripts/update.sh`](../deploy/scripts/update.sh), que:
 
-```bash
-sudo podman build --pull=always \
-  --file deploy/containers/app.Containerfile \
-  --tag "localhost/financial-app:$release" \
-  .
-```
-
-Guardar la imagen actual y mover `current`:
-
-```bash
-if sudo podman image exists localhost/financial-app:current; then
-  sudo podman tag \
-    localhost/financial-app:current \
-    localhost/financial-app:rollback
-fi
-
-sudo podman tag \
-  "localhost/financial-app:$release" \
-  localhost/financial-app:current
-```
-
-Reinstalar y validar el Quadlet versionado antes del reinicio:
-
-```bash
-sudo install -m 0644 \
-  deploy/quadlet/financial-app.container \
-  /etc/containers/systemd/financial-app.container
-sudo env QUADLET_UNIT_DIRS=/etc/containers/systemd \
-  /usr/lib/systemd/system-generators/podman-system-generator --dryrun
-sudo systemctl daemon-reload
-sudo systemctl restart financial-app.service
-
-deploy/scripts/smoke-test.sh http://127.0.0.1:3088
-deploy/scripts/smoke-test.sh https://finanzas.joserabalsegura.com
-```
+1. construye `localhost/financial-app:<commit>` sin parar el servicio;
+2. copia SQLite con `.backup` a
+   `/var/backups/financial-app/pre-deploy-<fecha>-<commit>.db` y verifica su
+   integridad;
+3. mueve `current` a `rollback` y la imagen nueva a `current`;
+4. reinstala el Quadlet, reinicia y pasa el smoke test local y público.
 
 La plantilla nginx no se reinstala en actualizaciones normales porque Certbot
 administra la copia operativa.
