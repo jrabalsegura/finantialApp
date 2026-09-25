@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getConvertReimbursementToExpenseRules,
-  getQuickTransactionRules,
-  getReimbursementTransactionRules
+  getQuickTransactionRules
 } from "./transaction-rules";
 
 test("gasto normal reduce la cuenta y afecta a gasto, ahorro y patrimonio", () => {
@@ -68,7 +67,7 @@ test("transferencia exige destino distinto", () => {
 });
 
 test("gasto reembolsable baja saldo sin contar como gasto ni ahorro", () => {
-  const rules = getReimbursementTransactionRules({
+  const rules = getQuickTransactionRules({
     type: "reimbursable_expense",
     amount: 120,
     accountId: "openbank"
@@ -83,7 +82,7 @@ test("gasto reembolsable baja saldo sin contar como gasto ni ahorro", () => {
 });
 
 test("cobro de reembolso sube saldo sin contar como ingreso ni ahorro", () => {
-  const rules = getReimbursementTransactionRules({
+  const rules = getQuickTransactionRules({
     type: "reimbursement_income",
     amount: 50,
     accountId: "openbank"

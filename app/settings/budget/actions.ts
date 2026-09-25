@@ -1,94 +1,76 @@
 "use server";
-import { requireCurrentUser } from "@/lib/auth";
 
-
-import {
-  WeeklyBudgetCalculationMode,
-  type Prisma
-} from "@prisma/client";
+import type { Prisma, WeeklyBudgetCalculationMode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { parseMoneyInput } from "@/domain/money";
+import { withErrorFeedback } from "@/lib/action-feedback";
+import { requireCurrentUser } from "@/lib/auth";
+import {
+  parseCheckbox,
+  parseEnum,
+  parseNonNegativeAmount,
+  parseOptionalString
+} from "@/lib/form-data";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_BUDGET_SETTING_ID } from "@/lib/weekly-budget";
 
-const VALID_CALCULATION_MODES = new Set<WeeklyBudgetCalculationMode>([
+const CALCULATION_MODES: WeeklyBudgetCalculationMode[] = [
   "remaining_days",
   "full_month_proportional"
-]);
+];
 
-export async function updateBudgetSetting(formData: FormData): Promise<void> {
-  await requireCurrentUser();
-  const monthlyMinimumSavingsTarget = parseNonNegativeAmount(
-    formData.get("monthlyMinimumSavingsTarget")
-  );
-  const weeklySpendingCap = parseNonNegativeAmount(formData.get("weeklySpendingCap"));
-  const savingsBucketId = parseOptionalString(formData.get("savingsBucketId"));
-  const calculationMode = parseCalculationMode(
-    formData.get("calculationMode")
-  );
-  const includeReimbursableExpenses =
-    formData.get("includeReimbursableExpenses") === "on";
-  const includePendingTransactions =
-    formData.get("includePendingTransactions") === "on";
+export const updateBudgetSetting = withErrorFeedback(
+  async (formData: FormData) => {
+    await requireCurrentUser();
+    const monthlyMinimumSavingsTarget = parseNonNegativeAmount(
+      formData.get("monthlyMinimumSavingsTarget")
+    );
+    const weeklySpendingCap = parseNonNegativeAmount(
+      formData.get("weeklySpendingCap")
+    );
+    const savingsBucketId = parseOptionalString(
+      formData.get("savingsBucketId")
+    );
+    const calculationMode = parseEnum(
+      formData.get("calculationMode"),
+      CALCULATION_MODES,
+      "Modo de cálculo no válido."
+    );
+    const includeReimbursableExpenses = parseCheckbox(
+      formData.get("includeReimbursableExpenses")
+    );
+    const includePendingTransactions = parseCheckbox(
+      formData.get("includePendingTransactions")
+    );
 
-  await prisma.$transaction(async (tx) => {
-    await assertSavingsBucketExists(tx, savingsBucketId);
-    await tx.budgetSetting.upsert({
-      where: { id: DEFAULT_BUDGET_SETTING_ID },
-      update: {
-        weeklySpendingCap,
-        monthlyMinimumSavingsTarget,
-        savingsBucketId,
-        calculationMode,
-        includeReimbursableExpenses,
-        includePendingTransactions
-      },
-      create: {
-        id: DEFAULT_BUDGET_SETTING_ID,
-        weeklySpendingCap,
-        monthlyMinimumSavingsTarget,
-        savingsBucketId,
-        calculationMode,
-        includeReimbursableExpenses,
-        includePendingTransactions
-      }
+    await prisma.$transaction(async (tx) => {
+      await assertSavingsBucketExists(tx, savingsBucketId);
+      await tx.budgetSetting.upsert({
+        where: { id: DEFAULT_BUDGET_SETTING_ID },
+        update: {
+          weeklySpendingCap,
+          monthlyMinimumSavingsTarget,
+          savingsBucketId,
+          calculationMode,
+          includeReimbursableExpenses,
+          includePendingTransactions
+        },
+        create: {
+          id: DEFAULT_BUDGET_SETTING_ID,
+          weeklySpendingCap,
+          monthlyMinimumSavingsTarget,
+          savingsBucketId,
+          calculationMode,
+          includeReimbursableExpenses,
+          includePendingTransactions
+        }
+      });
     });
-  });
 
-  revalidatePath("/");
-  revalidatePath("/weekly-budget");
-  revalidatePath("/settings/budget");
-}
-
-function parseNonNegativeAmount(value: FormDataEntryValue | null): number {
-  if (typeof value !== "string") {
-    throw new Error("Introduce el ahorro mínimo mensual.");
+    revalidatePath("/");
+    revalidatePath("/weekly-budget");
+    revalidatePath("/settings/budget");
   }
-
-  const amount = parseMoneyInput(value);
-  if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error("El ahorro mínimo debe ser cero o mayor.");
-  }
-
-  return amount;
-}
-
-function parseCalculationMode(
-  value: FormDataEntryValue | null
-): WeeklyBudgetCalculationMode {
-  if (
-    typeof value !== "string" ||
-    !VALID_CALCULATION_MODES.has(value as WeeklyBudgetCalculationMode)
-  ) {
-    throw new Error("Modo de cálculo no válido.");
-  }
-
-  return value as WeeklyBudgetCalculationMode;
-}
-
-function parseOptionalString(value: FormDataEntryValue | null): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
+);
 
 async function assertSavingsBucketExists(
   tx: Prisma.TransactionClient,

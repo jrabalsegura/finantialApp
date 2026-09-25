@@ -1,4 +1,3 @@
-
 import { adjustAccountBalance, adjustBucketBalance } from "@/lib/balances";
 import type {
   Prisma,
@@ -22,6 +21,9 @@ export type CreateTransactionInput = {
   description: string | null;
   personName?: string | null;
   reimbursementId?: string | null;
+  /** Reimbursable expenses only. */
+  dueDate?: Date | null;
+  notes?: string | null;
   weeklyBudgetImpactScope: WeeklyBudgetImpactScope;
 };
 
@@ -73,7 +75,9 @@ async function createTransactionInTx(
         originalTransactionId: transaction.id,
         expectedAmount: input.amount,
         paidAmount: 0,
-        status: "pending"
+        status: "pending",
+        dueDate: input.dueDate ?? null,
+        notes: input.notes ?? null
       }
     });
     await applyRules(tx, input, rules);
@@ -86,7 +90,8 @@ async function createTransactionInTx(
       throw new Error("Selecciona el pendiente que estás cobrando.");
     }
     const reimbursement = await tx.reimbursement.findUnique({
-      where: { id: reimbursementId }
+      where: { id: reimbursementId },
+      include: { originalTransaction: { select: { description: true } } }
     });
     if (
       !reimbursement ||
@@ -94,9 +99,10 @@ async function createTransactionInTx(
     ) {
       throw new Error("El pendiente seleccionado ya no admite cobros.");
     }
-    const pendingAmount =
-      normalizeMoney(toMoneyNumber(reimbursement.expectedAmount) -
-      toMoneyNumber(reimbursement.paidAmount));
+    const pendingAmount = normalizeMoney(
+      toMoneyNumber(reimbursement.expectedAmount) -
+        toMoneyNumber(reimbursement.paidAmount)
+    );
     if (input.amount > pendingAmount) {
       throw new Error("El cobro no puede superar el importe pendiente.");
     }
@@ -106,12 +112,18 @@ async function createTransactionInTx(
       {
         ...input,
         categoryId: null,
+        description:
+          input.description ??
+          `Cobro de reembolso: ${
+            reimbursement.originalTransaction.description ?? reimbursement.title
+          }`,
         reimbursementId
       },
       rules
     );
-    const newPaidAmount =
-      normalizeMoney(toMoneyNumber(reimbursement.paidAmount) + input.amount);
+    const newPaidAmount = normalizeMoney(
+      toMoneyNumber(reimbursement.paidAmount) + input.amount
+    );
     await tx.reimbursement.update({
       where: { id: reimbursementId },
       data: {
@@ -129,6 +141,15 @@ async function createTransactionInTx(
   const transaction = await createBaseTransaction(tx, input, rules);
   await applyRules(tx, input, rules);
   return transaction;
+}
+
+export async function applyBalanceDeltas(
+  tx: Prisma.TransactionClient,
+  balanceDeltas: Array<{ accountId: string; delta: number }>
+): Promise<void> {
+  for (const { accountId, delta } of balanceDeltas) {
+    await adjustAccountBalance(tx, accountId, delta);
+  }
 }
 
 async function createBaseTransaction(
@@ -149,9 +170,7 @@ async function createBaseTransaction(
       savingsBucketId:
         input.type === "savings_allocation" ? input.savingsBucketId : null,
       reimbursementId:
-        input.type === "reimbursement_income"
-          ? input.reimbursementId
-          : null,
+        input.type === "reimbursement_income" ? input.reimbursementId : null,
       affectsRealBalance: rules.impact.affectsRealBalance,
       affectsPersonalExpense: rules.impact.affectsPersonalExpense,
       affectsPersonalIncome: rules.impact.affectsPersonalIncome,
@@ -167,16 +186,18 @@ async function applyRules(
   input: CreateTransactionInput,
   rules: ReturnType<typeof getQuickTransactionRules>
 ): Promise<void> {
-  for (const balanceDelta of rules.balanceDeltas) {
-    await adjustAccountBalance(tx, balanceDelta.accountId, (balanceDelta.delta) );
-  }
+  await applyBalanceDeltas(tx, rules.balanceDeltas);
 
   if (rules.savingsBucketDelta > 0 && input.savingsBucketId) {
-    await adjustBucketBalance(tx, input.savingsBucketId, (rules.savingsBucketDelta) );
+    await adjustBucketBalance(
+      tx,
+      input.savingsBucketId,
+      rules.savingsBucketDelta
+    );
   }
 }
 
-async function assertAccountExists(
+export async function assertAccountExists(
   tx: Prisma.TransactionClient,
   accountId: string
 ): Promise<void> {
@@ -187,7 +208,7 @@ async function assertAccountExists(
   if (!account) throw new Error("La cuenta seleccionada no existe.");
 }
 
-async function assertSavingsBucketExists(
+export async function assertSavingsBucketExists(
   tx: Prisma.TransactionClient,
   savingsBucketId: string
 ): Promise<void> {
@@ -203,7 +224,7 @@ async function assertSavingsBucketExists(
   }
 }
 
-async function assertCategoryMatchesType(
+export async function assertCategoryMatchesType(
   tx: Prisma.TransactionClient,
   categoryId: string,
   type: QuickTransactionTemplateType

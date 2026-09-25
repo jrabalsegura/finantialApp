@@ -10,9 +10,6 @@ export type QuickTransactionType =
   | "reimbursable_expense"
   | "reimbursement_income"
   | "savings_allocation";
-export type ReimbursementTransactionType =
-  | "reimbursable_expense"
-  | "reimbursement_income";
 
 export type AccountBalanceDelta = {
   accountId: string;
@@ -31,12 +28,6 @@ export type QuickTransactionRules = {
   impact: TransactionImpact;
   balanceDeltas: AccountBalanceDelta[];
   savingsBucketDelta: number;
-};
-
-export type ReimbursementTransactionInput = {
-  type: ReimbursementTransactionType;
-  amount: number;
-  accountId: string;
 };
 
 export type ConvertReimbursementInput = {
@@ -97,12 +88,6 @@ export function getQuickTransactionRules(
     balanceDeltas: [],
     savingsBucketDelta: input.amount
   };
-}
-
-export function getReimbursementTransactionRules(
-  input: ReimbursementTransactionInput
-): QuickTransactionRules {
-  return getQuickTransactionRules(input);
 }
 
 export function getConvertReimbursementToExpenseRules(

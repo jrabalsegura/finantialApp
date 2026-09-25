@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-base_url=${1:-http://127.0.0.1:3080}
+base_url=${1:-http://127.0.0.1:3081}
 temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/financial-app-smoke.XXXXXX")
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
 

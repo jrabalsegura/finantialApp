@@ -43,8 +43,9 @@ export function SessionActivityRefresher() {
         keepalive: true
       })
         .then((response) => {
-          if (response.redirected && isLoginUrl(response.url)) {
-            window.location.assign(response.url);
+          if (response.status === 401) {
+            const next = `${window.location.pathname}${window.location.search}`;
+            window.location.assign(`/login?next=${encodeURIComponent(next)}`);
           }
         })
         .catch(() => {
@@ -75,12 +76,4 @@ export function SessionActivityRefresher() {
   }, [pathname]);
 
   return null;
-}
-
-function isLoginUrl(value: string): boolean {
-  try {
-    return new URL(value, window.location.origin).pathname.startsWith("/login");
-  } catch {
-    return false;
-  }
 }
