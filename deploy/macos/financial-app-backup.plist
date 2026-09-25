@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Plantilla: `make backup-schedule` sustituye __HOME__ y la instala en
+     ~/Library/LaunchAgents. Se ejecuta a diario a las 12:00, o al despertar el
+     Mac si estaba dormido a esa hora. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.financial-app.backup-pull</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>__HOME__/.local/bin/financial-app-pull-backup</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>12</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/financial-app-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/financial-app-backup.log</string>
+</dict>
+</plist>

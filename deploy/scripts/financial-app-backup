@@ -5,6 +5,10 @@ umask 077
 backup_root=${FINANCIAL_APP_BACKUP_ROOT:-/var/backups/financial-app}
 retention_days=${FINANCIAL_APP_BACKUP_RETENTION_DAYS:-14}
 source_root=${FINANCIAL_APP_BACKUP_SOURCE_ROOT:-/}
+# Opcional: copia legible por un usuario sin privilegios para bajarla fuera del
+# servidor (deploy/scripts/pull-backup.sh). Requiere ambos valores.
+export_dir=${FINANCIAL_APP_BACKUP_EXPORT_DIR:-}
+export_owner=${FINANCIAL_APP_BACKUP_EXPORT_OWNER:-}
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 app_was_active=false
 
@@ -46,5 +50,15 @@ find "$backup_root" \
   -name 'financial-app-*.tar.gz' \
   -mtime "+$retention_days" \
   -delete
+
+if [ -n "$export_dir" ] && [ -n "$export_owner" ]; then
+  install -d -m 0700 -o "$export_owner" "$export_dir"
+  install -m 0600 -o "$export_owner" "$final_archive" "$export_dir/"
+  find "$export_dir" \
+    -type f \
+    -name 'financial-app-*.tar.gz' \
+    -mtime "+$retention_days" \
+    -delete
+fi
 
 printf '%s\n' "$final_archive"
