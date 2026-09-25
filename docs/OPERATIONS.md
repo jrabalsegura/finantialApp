@@ -61,6 +61,35 @@ sudo systemctl status financial-app-backup.service
 sudo ls -lh /var/backups/financial-app
 ```
 
+## Copia fuera del servidor (Mac)
+
+El backup diario deja además un duplicado en `/home/jrabal/financial-app-backups`
+(modo `0600`, 14 días), configurado por el drop-in
+[`deploy/systemd/financial-app-backup-export.conf`](../deploy/systemd/financial-app-backup-export.conf).
+Instalación en el servidor:
+
+```bash
+cd /var/www/financial-app
+sudo install -m 0755 deploy/scripts/financial-app-backup /usr/local/sbin/financial-app-backup
+sudo install -d -m 0755 /etc/systemd/system/financial-app-backup.service.d
+sudo install -m 0644 deploy/systemd/financial-app-backup-export.conf \
+  /etc/systemd/system/financial-app-backup.service.d/export.conf
+sudo systemctl daemon-reload
+```
+
+En el Mac:
+
+```bash
+make backup-pull       # descarga a ~/Backups/finanzas y verifica la última copia
+make backup-schedule   # launchd, a diario a las 12:00 (o al despertar)
+make backup-unschedule
+```
+
+El script conserva 90 días en el Mac y muestra una notificación si la descarga
+falla, la copia está dañada o la más reciente tiene más de 2 días. Log:
+`~/Library/Logs/financial-app-backup.log`. Los archivos incluyen
+`/etc/financial-app/app.env` (el secreto de sesión): mantén FileVault activado.
+
 ## Comprobar un backup sin restaurarlo
 
 ```bash

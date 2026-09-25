@@ -5,7 +5,7 @@ CONTAINER_ENV := FINANCIAL_APP_HTTP_PORT=$(FINANCIAL_APP_HTTP_PORT) FINANCIAL_AP
 DEPLOY_HOST ?= remote
 DEPLOY_DIR ?= /var/www/financial-app
 
-.PHONY: check container-build container-import-db container-up container-status container-logs container-check container-down deploy
+.PHONY: check container-build container-import-db container-up container-status container-logs container-check container-down deploy backup-pull backup-schedule backup-unschedule
 
 check:
 	npm run typecheck
@@ -46,3 +46,23 @@ deploy:
 	git fetch origin main
 	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || (echo "main local no coincide con origin/main: haz push o pull primero." && exit 2)
 	ssh -t $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && git pull --ff-only origin main && deploy/scripts/update.sh'
+
+BACKUP_AGENT := $(HOME)/Library/LaunchAgents/com.financial-app.backup-pull.plist
+
+# Baja a ~/Backups/finanzas las copias exportadas por el servidor y verifica la última.
+backup-pull:
+	./deploy/scripts/pull-backup.sh
+
+# Programa backup-pull a diario con launchd. launchd no puede leer ~/Desktop,
+# así que ejecuta una copia del script en ~/.local/bin (repite tras cambiarlo).
+backup-schedule:
+	install -d $(HOME)/.local/bin $(HOME)/Library/LaunchAgents
+	install -m 0755 deploy/scripts/pull-backup.sh $(HOME)/.local/bin/financial-app-pull-backup
+	sed 's|__HOME__|$(HOME)|g' deploy/macos/financial-app-backup.plist > $(BACKUP_AGENT)
+	-launchctl bootout gui/$$(id -u) $(BACKUP_AGENT) 2>/dev/null
+	launchctl bootstrap gui/$$(id -u) $(BACKUP_AGENT)
+	@echo "Programado a diario a las 12:00. Log: ~/Library/Logs/financial-app-backup.log"
+
+backup-unschedule:
+	-launchctl bootout gui/$$(id -u) $(BACKUP_AGENT)
+	rm -f $(BACKUP_AGENT) $(HOME)/.local/bin/financial-app-pull-backup
