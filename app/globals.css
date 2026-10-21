@@ -1,39 +1,148 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  color-scheme: light;
-  background: #f7f7f4;
-  color: #172026;
+/*
+  Tailwind 4 keeps the look of the app on Tailwind 3: its colours (the v4
+  palette is oklch and more saturated) and its fixed line heights (v4 uses
+  unitless ones that children with another font size inherit).
+*/
+@theme {
+  --color-ink: #172026;
+  --color-muted: #5f6b76;
+  --color-surface: #f7f7f4;
+  --color-line: #dedbd2;
+  --color-accent: #1f7a6b;
+
+  --color-gray-200: #e5e7eb;
+  --color-gray-400: #9ca3af;
+
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-red-800: #991b1b;
+  --color-red-900: #7f1d1d;
+  --color-red-950: #450a0a;
+
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-900: #78350f;
+  --color-amber-950: #451a03;
+
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+
+  --color-sky-50: #f0f9ff;
+  --color-sky-100: #e0f2fe;
+  --color-sky-200: #bae6fd;
+  --color-sky-300: #7dd3fc;
+  --color-sky-400: #38bdf8;
+  --color-sky-500: #0ea5e9;
+  --color-sky-600: #0284c7;
+  --color-sky-700: #0369a1;
+  --color-sky-800: #075985;
+  --color-sky-900: #0c4a6e;
+  --color-sky-950: #082f49;
+
+  --color-rose-50: #fff1f2;
+  --color-rose-100: #ffe4e6;
+  --color-rose-200: #fecdd3;
+  --color-rose-300: #fda4af;
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+  --color-rose-600: #e11d48;
+  --color-rose-700: #be123c;
+  --color-rose-800: #9f1239;
+  --color-rose-900: #881337;
+  --color-rose-950: #4c0519;
+
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
 }
 
-* {
-  box-sizing: border-box;
-}
+/*
+  Element rules go in the base layer: in Tailwind 4 any rule outside a layer
+  beats every utility, so `a { color: inherit }` would undo `text-white` on a
+  link. The class rules below stay outside, as they beat utilities in v3 too.
+*/
+@layer base {
+  /* Tailwind 3 preflight defaults that v4 changed. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200);
+  }
 
-html {
-  min-height: 100%;
-}
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
 
-body {
-  min-height: 100vh;
-  margin: 0;
-  background: #f7f7f4;
-  color: #172026;
-  font-family: Arial, Helvetica, sans-serif;
-}
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+  :root {
+    color-scheme: light;
+    background: #f7f7f4;
+    color: #172026;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-height: 100%;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background: #f7f7f4;
+    color: #172026;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 .field-label {

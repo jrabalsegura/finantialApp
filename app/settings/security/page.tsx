@@ -33,7 +33,7 @@ export default async function SecuritySettingsPage() {
           </div>
         </header>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Usuarios</h2>
             <p className="mt-1 text-sm text-muted">

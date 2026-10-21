@@ -48,7 +48,7 @@ export default async function AccountsPage() {
           </div>
         </header>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Cuentas</h2>
           </div>
@@ -137,7 +137,7 @@ export default async function AccountsPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <h2 className="text-lg font-semibold text-ink">Crear cuenta</h2>
           <form action={createAccount} className="mt-4 grid gap-4">
             <AccountFields />

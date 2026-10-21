@@ -14,7 +14,7 @@ export function MetricCard({
   value: number;
 }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p
         className={`amount-text mt-2 text-2xl font-semibold ${
@@ -43,7 +43,7 @@ export function NetWorthVariationCard({
     | null;
 }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">Variación patrimonial</p>
       {variation ? (
         <>
@@ -99,7 +99,7 @@ export function DistributionPanel({
   );
 
   return (
-    <section className="rounded-lg border border-line bg-white shadow-sm">
+    <section className="rounded-lg border border-line bg-white shadow-xs">
       <div className="border-b border-line px-4 py-3 sm:px-5">
         <h2 className="text-lg font-semibold text-ink">{title}</h2>
       </div>
@@ -143,7 +143,7 @@ export function CategoryBreakdownPanel({
   const amountColor = tone === "income" ? "text-emerald-700" : "text-rose-700";
 
   return (
-    <section className="rounded-lg border border-line bg-white shadow-sm">
+    <section className="rounded-lg border border-line bg-white shadow-xs">
       <div className="border-b border-line px-4 py-3 sm:px-5">
         <h2 className="text-lg font-semibold text-ink">{title}</h2>
       </div>

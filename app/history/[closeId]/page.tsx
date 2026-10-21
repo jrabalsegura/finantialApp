@@ -123,7 +123,7 @@ export default async function MonthlyCloseDetailPage({
         </header>
 
         {latestClose?.id !== close.id ? (
-          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 shadow-sm sm:p-5">
+          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-900 shadow-xs sm:p-5">
             Solo se puede deshacer el último cierre mensual.
           </section>
         ) : null}
@@ -178,7 +178,7 @@ export default async function MonthlyCloseDetailPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Saldos por cuenta
@@ -259,7 +259,7 @@ export default async function MonthlyCloseDetailPage({
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Partidas de ahorro
@@ -338,7 +338,7 @@ function Metric({
       : "text-ink";
 
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className={`amount-text mt-2 text-2xl font-semibold ${color}`}>
         {value === null

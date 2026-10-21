@@ -101,7 +101,7 @@ export default async function CategoryMonthPage({
         </header>
 
         <section className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
             <p className="text-sm font-medium text-muted">Total del mes</p>
             <p
               className={`mt-2 text-3xl font-semibold ${
@@ -111,7 +111,7 @@ export default async function CategoryMonthPage({
               {currencyFormatter.format(total)}
             </p>
           </div>
-          <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
             <p className="text-sm font-medium text-muted">Movimientos</p>
             <p className="mt-2 text-3xl font-semibold text-ink">
               {transactions.length}
@@ -119,7 +119,7 @@ export default async function CategoryMonthPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Detalle de movimientos

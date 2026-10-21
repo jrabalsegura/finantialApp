@@ -26,7 +26,7 @@ export function SecurityForms() {
     <div className="grid gap-6 lg:grid-cols-2">
       <form
         action={passwordAction}
-        className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-sm sm:p-6"
+        className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-xs sm:p-6"
       >
         <div>
           <h2 className="text-lg font-semibold text-ink">
@@ -87,7 +87,7 @@ export function SecurityForms() {
 
       <form
         action={userAction}
-        className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-sm sm:p-6"
+        className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-xs sm:p-6"
       >
         <div>
           <h2 className="text-lg font-semibold text-ink">Crear usuario</h2>

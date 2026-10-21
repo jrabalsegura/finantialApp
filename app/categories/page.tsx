@@ -100,7 +100,7 @@ export default async function CategoriesPage({
           </div>
         </header>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <form className="grid gap-4 sm:grid-cols-[220px_220px_auto]" method="GET">
             <label className="field-label">
               Mes
@@ -136,7 +136,7 @@ export default async function CategoriesPage({
           <Metric label="Categorías creadas" value={String(categories.length)} />
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Distribución del mes
@@ -193,7 +193,7 @@ export default async function CategoriesPage({
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <h2 className="text-lg font-semibold text-ink">Crear categoría</h2>
           <form action={createCategory} className="mt-4 grid gap-4 lg:grid-cols-5">
             <CategoryFields />
@@ -203,7 +203,7 @@ export default async function CategoriesPage({
           </form>
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Categorías existentes
@@ -324,7 +324,7 @@ function CategoryFields({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {value}

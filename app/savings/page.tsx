@@ -95,7 +95,7 @@ export default async function SavingsPage() {
         </section>
 
         {manualSavingsBuckets.length >= 2 ? (
-          <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+          <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
             <h2 className="text-lg font-semibold text-ink">
               Transferir entre partidas
             </h2>
@@ -164,7 +164,7 @@ export default async function SavingsPage() {
           </section>
         ) : null}
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Partidas</h2>
           </div>
@@ -254,7 +254,7 @@ export default async function SavingsPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <h2 className="text-lg font-semibold text-ink">Crear partida</h2>
           <form action={createSavingsBucket} className="mt-4 grid gap-4">
             <SavingsBucketFields mode="create" />
@@ -376,7 +376,7 @@ function SavingsBucketFields({
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {currencyFormatter.format(value)}

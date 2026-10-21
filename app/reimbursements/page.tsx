@@ -80,7 +80,7 @@ export default async function ReimbursementsPage() {
         </header>
 
         {accounts.length > 0 ? (
-          <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+          <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
             <h2 className="text-lg font-semibold text-ink">
               Añadir gasto reembolsable
             </h2>
@@ -199,7 +199,7 @@ export default async function ReimbursementsPage() {
           </section>
         )}
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Cobros pendientes</h2>
           </div>

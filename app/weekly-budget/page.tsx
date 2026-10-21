@@ -65,7 +65,7 @@ export default async function WeeklyBudgetPage() {
           </section>
         ) : null}
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Desglose del cálculo
@@ -170,7 +170,7 @@ export default async function WeeklyBudgetPage() {
           />
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Ingresos extra incluidos esta semana
@@ -213,7 +213,7 @@ export default async function WeeklyBudgetPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Ajustes que reducen el disponible semanal
@@ -257,7 +257,7 @@ export default async function WeeklyBudgetPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Gastos variables incluidos esta semana
@@ -300,7 +300,7 @@ export default async function WeeklyBudgetPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Transferencias que reducen el disponible
@@ -391,7 +391,7 @@ function FixedItems({
   title: string;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-white shadow-sm">
+    <section className="rounded-lg border border-line bg-white shadow-xs">
       <div className="border-b border-line px-4 py-3 sm:px-5">
         <h2 className="text-lg font-semibold text-ink">{title}</h2>
       </div>

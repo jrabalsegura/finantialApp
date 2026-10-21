@@ -1,7 +1,7 @@
 # Finanzas personales
 
 App personal de finanzas en producción (un único usuario real). Next.js 16 (App
-Router, server actions) + React 19 + Prisma 6 + SQLite + Tailwind 3. Interfaz y
+Router, server actions) + React 19 + Prisma 6 + SQLite + Tailwind 4. Interfaz y
 mensajes en español; identificadores de código en inglés.
 
 ## Comandos
@@ -56,6 +56,10 @@ Un test concreto: `node --import tsx --test --test-name-pattern "reembolso" test
   modifica; hay que reabrir los cierres del más reciente al más antiguo.
 - **Fechas de negocio**: `YYYY-MM-DD` se guarda a las 12:00 locales
   (`parseDate`), con `TZ=Europe/Madrid`.
+- **Estilos (Tailwind 4)**: `app/globals.css` fija en `@theme` los colores y
+  los interlineados de Tailwind 3 para que la app se vea igual. Las reglas de
+  elementos (`a`, `button`…) van en `@layer base`: fuera de una capa ganarían
+  a todas las utilidades.
 - Los movimientos ligados (reembolsos, transferencias entre partidas con
   `savingsTransferId`, ocurrencias recurrentes, ajustes de cierre) se gestionan
   desde su pantalla, no desde "recientes".

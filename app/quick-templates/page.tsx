@@ -105,7 +105,7 @@ export default async function QuickTemplatesPage() {
           </Link>
         </header>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Plantillas</h2>
           </div>
@@ -144,7 +144,7 @@ export default async function QuickTemplatesPage() {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <h2 className="text-lg font-semibold text-ink">Crear plantilla</h2>
           {accounts.length ? (
             <form
@@ -183,7 +183,7 @@ function QuickTemplateListItem({
       <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="break-words font-semibold text-ink">
+            <h3 className="wrap-break-word font-semibold text-ink">
               {template.icon ? `${template.icon} ` : ""}
               {template.name}
             </h3>
