@@ -500,6 +500,20 @@ make deploy         # pide la contraseña de sudo del servidor
 La plantilla nginx no se reinstala en actualizaciones normales porque Certbot
 administra la copia operativa.
 
+### Mantenimiento
+
+- El CI de GitHub (`.github/workflows/ci.yml`) pasa `make check` y construye
+  la imagen con el smoke test en cada PR y en `main`.
+- Dependabot (`.github/dependabot.yml`) abre PRs agrupados de npm, la imagen
+  base de node y las GitHub Actions: los de seguridad al momento y los de
+  versiones menores y parches el día 1 de cada mes. Las versiones mayores se
+  hacen a mano.
+- Una vez al mes: fusiona los PRs de Dependabot con el CI en verde y haz
+  `make deploy`, aunque no haya cambios propios, para que la imagen recoja los
+  parches de la base. Un aviso de seguridad de algo accesible sin login
+  (Next.js, `middleware.ts`, login, health, la imagen base) se despliega el
+  mismo día.
+
 ## 13. Rollback
 
 Si la versión no añadió una migración incompatible, vuelve a la imagen previa:
