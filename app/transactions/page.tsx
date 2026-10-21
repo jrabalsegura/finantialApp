@@ -43,7 +43,7 @@ export default async function RecentTransactionsPage() {
           </p>
         </header>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               {recentTransactions.length} movimientos
@@ -121,7 +121,7 @@ export default async function RecentTransactionsPage() {
                           <RecentTransactionEditDetails
                             summary={
                               <summary
-                                className="icon-action cursor-pointer list-none text-accent hover:border-emerald-200 hover:bg-emerald-50 [&::-webkit-details-marker]:hidden"
+                                className="icon-action cursor-pointer list-none text-accent hover:border-emerald-200! hover:bg-emerald-50! [&::-webkit-details-marker]:hidden"
                                 title="Editar movimiento"
                               >
                                 <PencilIcon />
@@ -129,7 +129,7 @@ export default async function RecentTransactionsPage() {
                               </summary>
                             }
                           >
-                            <div className="absolute right-0 top-full z-20 mt-2 grid w-[min(46rem,calc(100vw-3rem))] gap-3 rounded-lg border border-line bg-surface p-3 text-left shadow-sm">
+                            <div className="absolute right-0 top-full z-20 mt-2 grid w-[min(46rem,calc(100vw-3rem))] gap-3 rounded-lg border border-line bg-surface p-3 text-left shadow-xs">
                               <form
                                 action={updateRecentTransaction}
                                 className="grid gap-3 lg:grid-cols-4"
@@ -297,7 +297,7 @@ export default async function RecentTransactionsPage() {
                           <form action={deleteRecentTransaction}>
                             <input name="id" type="hidden" value={transaction.id} />
                             <ConfirmSubmitButton
-                              className="icon-action text-rose-700 hover:border-rose-200 hover:bg-rose-50"
+                              className="icon-action text-rose-700 hover:border-rose-200! hover:bg-rose-50!"
                               confirmMessage="¿Eliminar este movimiento y revertir su efecto?"
                               title="Eliminar movimiento"
                             >

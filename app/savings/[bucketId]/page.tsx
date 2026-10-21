@@ -102,7 +102,7 @@ export default async function SavingsBucketHistoryPage({
         <section className="grid gap-3 sm:grid-cols-3">
           <Metric label="Asignado actual" value={currentAmount} />
           <Metric label="Neto por movimientos" value={netAssigned} />
-          <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
             <p className="text-sm font-medium text-muted">Objetivo</p>
             <p className="amount-text mt-2 text-3xl font-semibold text-ink">
               {targetAmount ? currencyFormatter.format(targetAmount) : "-"}
@@ -114,7 +114,7 @@ export default async function SavingsBucketHistoryPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Movimientos relacionados
@@ -192,7 +192,7 @@ export default async function SavingsBucketHistoryPage({
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className="amount-text mt-2 text-3xl font-semibold text-ink">
         {currencyFormatter.format(value)}

@@ -15,7 +15,7 @@ export default async function LoginPage({
 
   return (
     <main className="grid min-h-screen place-items-center px-4 py-8">
-      <section className="grid w-full max-w-md gap-6 rounded-lg border border-line bg-white p-5 shadow-sm sm:p-6">
+      <section className="grid w-full max-w-md gap-6 rounded-lg border border-line bg-white p-5 shadow-xs sm:p-6">
         <header className="grid gap-2">
           <p className="text-sm font-semibold uppercase tracking-wide text-accent">
             Finanzas

@@ -160,7 +160,7 @@ export function BackupManager() {
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
         <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
           <div>
             <h2 className="text-lg font-semibold text-ink">
@@ -190,7 +190,7 @@ export function BackupManager() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
         <div>
           <h2 className="text-lg font-semibold text-ink">Restaurar copia</h2>
           <p className="mt-1 text-sm text-muted">

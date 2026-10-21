@@ -59,7 +59,7 @@ export default async function HistoryPage() {
 
         {rows.length > 0 ? (
           <>
-            <section className="hidden overflow-x-auto rounded-lg border border-line bg-white shadow-sm md:block">
+            <section className="hidden overflow-x-auto rounded-lg border border-line bg-white shadow-xs md:block">
               <table className="w-full min-w-[1120px] border-collapse text-left">
                 <thead className="bg-surface text-xs uppercase text-muted">
                   <tr>
@@ -107,7 +107,7 @@ export default async function HistoryPage() {
             <section className="grid gap-3 md:hidden">
               {rows.map((close) => (
                 <Link
-                  className="rounded-lg border border-line bg-white p-4 shadow-sm"
+                  className="rounded-lg border border-line bg-white p-4 shadow-xs"
                   href={`/history/${close.id}`}
                   key={close.id}
                 >
@@ -150,7 +150,7 @@ export default async function HistoryPage() {
             </section>
           </>
         ) : (
-          <section className="rounded-lg border border-line bg-white px-5 py-10 text-center shadow-sm">
+          <section className="rounded-lg border border-line bg-white px-5 py-10 text-center shadow-xs">
             <h2 className="text-xl font-semibold text-ink">
               Aún no hay meses cerrados
             </h2>

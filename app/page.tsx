@@ -122,7 +122,7 @@ export default async function Home() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           <section className="order-2 grid gap-6 lg:order-1">
-            <section className="rounded-lg border border-line bg-white shadow-sm">
+            <section className="rounded-lg border border-line bg-white shadow-xs">
               <div className="grid gap-3 border-b border-line px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
                 <div>
                   <h2 className="text-lg font-semibold text-ink">
@@ -228,7 +228,7 @@ export default async function Home() {
               />
             </section>
 
-            <section className="rounded-lg border border-line bg-white shadow-sm">
+            <section className="rounded-lg border border-line bg-white shadow-xs">
               <div className="grid gap-3 border-b border-line px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
                 <div>
                   <h2 className="text-lg font-semibold text-ink">
@@ -361,7 +361,7 @@ function SavingsBucketsGoalPanel({
   }>;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-white shadow-sm">
+    <section className="rounded-lg border border-line bg-white shadow-xs">
       <div className="border-b border-line px-4 py-3 sm:px-5">
         <h2 className="text-lg font-semibold text-ink">
           Progreso por partidas de ahorro

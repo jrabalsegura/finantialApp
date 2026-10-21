@@ -37,7 +37,7 @@ export default async function BudgetSettingsPage() {
 
         <form
           action={updateBudgetSetting}
-          className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-sm sm:p-6"
+          className="grid gap-5 rounded-lg border border-line bg-white p-4 shadow-xs sm:p-6"
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="field-label">

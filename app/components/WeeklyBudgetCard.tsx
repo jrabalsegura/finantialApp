@@ -18,7 +18,7 @@ export function WeeklyBudgetCard({
   if (isMonthClosed) {
     return (
       <Link
-        className="block overflow-hidden rounded-xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-6"
+        className="block overflow-hidden rounded-xl border border-line bg-white p-5 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md sm:p-6"
         href={closedMonthHref}
       >
         <div className="flex items-start justify-between gap-4">
@@ -75,7 +75,7 @@ export function WeeklyBudgetCard({
 
   return (
     <Link
-      className={`block overflow-hidden rounded-xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-6 ${
+      className={`block overflow-hidden rounded-xl border p-5 shadow-xs transition hover:-translate-y-0.5 hover:shadow-md sm:p-6 ${
         isOverBudget || hasNegativeMonthlyBudget
           ? "border-rose-300 bg-rose-50"
           : "border-emerald-300 bg-emerald-950 text-white"

@@ -191,7 +191,7 @@ export default async function RecurringPage({
             {message}
           </p>
         ))}
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="grid gap-3 border-b border-line px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5">
             <div>
               <h2 className="text-lg font-semibold text-ink">
@@ -241,7 +241,7 @@ export default async function RecurringPage({
                             <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <h3 className="break-words font-semibold text-ink">
+                                  <h3 className="wrap-break-word font-semibold text-ink">
                                     {template.name}
                                   </h3>
                                   <StatusBadge status={occurrence.status} />
@@ -253,14 +253,14 @@ export default async function RecurringPage({
                                     }
                                   </span>
                                 </div>
-                                <p className="mt-1 break-words text-sm text-muted">
+                                <p className="mt-1 wrap-break-word text-sm text-muted">
                                   {formatRoute(template)} ·{" "}
                                   {dateFormatter.format(
                                     occurrence.scheduledDate
                                   )}
                                 </p>
                                 {template.category ? (
-                                  <p className="mt-1 break-words text-xs text-muted">
+                                  <p className="mt-1 wrap-break-word text-xs text-muted">
                                     Categoría: {template.category.name}
                                   </p>
                                 ) : null}
@@ -363,7 +363,7 @@ export default async function RecurringPage({
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-4 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">Plantillas</h2>
             <p className="mt-1 text-sm text-muted">
@@ -401,7 +401,7 @@ export default async function RecurringPage({
                             <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <h3 className="break-words font-semibold text-ink">
+                                  <h3 className="wrap-break-word font-semibold text-ink">
                                     {template.name}
                                   </h3>
                                   <span
@@ -430,7 +430,7 @@ export default async function RecurringPage({
                                     toMoneyNumber(template.amount)
                                   )}
                                 </p>
-                                <p className="mt-1 break-words text-xs text-muted">
+                                <p className="mt-1 wrap-break-word text-xs text-muted">
                                   Próxima fecha:{" "}
                                   {nextDate
                                     ? dateFormatter.format(nextDate)
@@ -537,7 +537,7 @@ export default async function RecurringPage({
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <h2 className="text-lg font-semibold text-ink">
             Crear movimiento fijo
           </h2>

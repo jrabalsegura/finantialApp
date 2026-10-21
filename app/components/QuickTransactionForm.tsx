@@ -162,7 +162,7 @@ export function QuickTransactionForm({
 
   return (
     <section
-      className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5"
+      className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5"
       id="quick-transaction"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -171,7 +171,7 @@ export function QuickTransactionForm({
           return (
             <button
               aria-pressed={isSelected}
-              className={`min-h-20 min-w-0 whitespace-normal break-words rounded-lg border px-4 py-4 text-left text-base font-semibold leading-snug transition [overflow-wrap:anywhere] ${
+              className={`min-h-20 min-w-0 whitespace-normal wrap-break-word rounded-lg border px-4 py-4 text-left text-base font-semibold leading-snug transition wrap-anywhere ${
                 isSelected
                   ? `${item.tone} ring-2 ring-ink`
                   : "border-line bg-surface text-ink"
@@ -199,7 +199,7 @@ export function QuickTransactionForm({
           </a>
         </div>
         {visibleTemplates.length ? (
-          <div className="mt-3 grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {visibleTemplates.map((template) => (
               <button
                 className="min-w-0 rounded-lg border border-line bg-surface px-3 py-3 text-left font-semibold text-ink transition hover:border-accent"
@@ -212,11 +212,11 @@ export function QuickTransactionForm({
                 }
                 type="button"
               >
-                <span className="block break-words text-sm [overflow-wrap:anywhere]">
+                <span className="block wrap-break-word text-sm wrap-anywhere">
                   {template.icon ? `${template.icon} ` : ""}
                   {template.name}
                 </span>
-                <span className="mt-1 block break-words text-xs font-normal text-muted [overflow-wrap:anywhere]">
+                <span className="mt-1 block wrap-break-word text-xs font-normal text-muted wrap-anywhere">
                   {template.draft.amount === null
                     ? "Introducir importe"
                     : formatCurrencyEUR(template.draft.amount)}

@@ -11,7 +11,7 @@ adelanta trabajo de la fase siguiente.
 |---|---|---|
 | M1 | Node 24 | En PR, pendiente de desplegar |
 | M2 | Next 16 | En PR, pendiente de desplegar |
-| M3 | Tailwind 4 | Pendiente |
+| M3 | Tailwind 4 | En PR, pendiente de desplegar |
 
 Orden recomendado: M1 primero por la fecha límite; M2 cierra las alertas altas
 de Dependabot que quedan (`postcss` dentro de Next 15 y `deepmerge-ts`); M3
@@ -128,8 +128,8 @@ puede corregir en Tailwind 3).
 
 ### Criterios de aceptación
 
-- [ ] `make check` y el CI en verde; `npm ls postcss-selector-parser` vacío.
-- [ ] Comparación visual antes y después, en escritorio y en móvil, de las
+- [x] `make check` y el CI en verde; `npm ls postcss-selector-parser` vacío.
+- [x] Comparación visual antes y después, en escritorio y en móvil, de las
       pantallas (inicio, movimientos, cuentas, categorías, historial,
       plantillas rápidas, recurrentes, reembolsos, ahorro, presupuesto
       semanal, cierre mensual, ajustes y login): mismos colores, bordes,

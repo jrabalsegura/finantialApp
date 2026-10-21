@@ -109,7 +109,7 @@ export default async function AccountHistoryPage({
             label="Variación por movimientos"
             value={realBalanceVariation}
           />
-          <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
             <p className="text-sm font-medium text-muted">Movimientos</p>
             <p className="amount-text mt-2 text-3xl font-semibold text-ink">
               {transactions.length}
@@ -125,7 +125,7 @@ export default async function AccountHistoryPage({
           </div>
         </section>
 
-        <section className="rounded-lg border border-line bg-white shadow-sm">
+        <section className="rounded-lg border border-line bg-white shadow-xs">
           <div className="border-b border-line px-4 py-3 sm:px-5">
             <h2 className="text-lg font-semibold text-ink">
               Movimientos relacionados
@@ -197,7 +197,7 @@ export default async function AccountHistoryPage({
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className="amount-text mt-2 text-3xl font-semibold text-ink">
         {currencyFormatter.format(value)}

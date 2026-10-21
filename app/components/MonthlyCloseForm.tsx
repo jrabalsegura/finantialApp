@@ -232,7 +232,7 @@ export function MonthlyCloseForm({
         </p>
       ) : null}
 
-      <section className="rounded-lg border border-line bg-white shadow-sm">
+      <section className="rounded-lg border border-line bg-white shadow-xs">
         <StepHeader
           step="2-5"
           title="Saldos, diferencias y ajustes"
@@ -372,7 +372,7 @@ export function MonthlyCloseForm({
         </ul>
       </section>
 
-      <section className="rounded-lg border border-line bg-white shadow-sm">
+      <section className="rounded-lg border border-line bg-white shadow-xs">
         <StepHeader
           step="6"
           title="Ahorro mensual real"
@@ -388,7 +388,7 @@ export function MonthlyCloseForm({
         </div>
       </section>
 
-      <section className="rounded-lg border border-line bg-white shadow-sm">
+      <section className="rounded-lg border border-line bg-white shadow-xs">
         <StepHeader
           step="7"
           title={getBucketStepTitle(manualCloseResult.kind)}
@@ -609,7 +609,7 @@ export function MonthlyCloseForm({
         )}
       </section>
 
-      <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
         <StepHeader
           step="8"
           title="Guardar cierre"
@@ -618,7 +618,7 @@ export function MonthlyCloseForm({
         <label className="field-label mt-4">
           Notas
           <textarea
-            className="min-h-24 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-accent"
+            className="min-h-24 rounded-lg border border-line bg-white px-3 py-2 text-base outline-hidden focus:border-accent"
             name="notes"
             placeholder="Notas opcionales del cierre"
           />
@@ -665,7 +665,7 @@ export function MonthlyCloseForm({
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {currencyFormatter.format(value)}

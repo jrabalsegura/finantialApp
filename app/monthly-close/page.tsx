@@ -244,7 +244,7 @@ export default async function MonthlyClosePage({
           </div>
         </header>
 
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-accent">
             Paso 1
           </p>
@@ -268,7 +268,7 @@ export default async function MonthlyClosePage({
         </section>
 
         {pendingRecurringCount > 0 ? (
-          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-sm sm:p-5">
+          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-xs sm:p-5">
             <h2 className="font-semibold">Movimientos fijos pendientes</h2>
             <p className="mt-1 text-sm">
               Tienes movimientos fijos pendientes de confirmar u omitir antes
@@ -350,7 +350,7 @@ function ExistingClose({
         <Metric label="Gastos" value={toMoneyNumber(close.totalExpense)} />
         <Metric label="Ahorro mensual" value={toMoneyNumber(close.monthlySavings)} />
       </section>
-      <section className="rounded-lg border border-line bg-white shadow-sm">
+      <section className="rounded-lg border border-line bg-white shadow-xs">
         <div className="border-b border-line px-4 py-3 sm:px-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -399,7 +399,7 @@ function ExistingClose({
         </ul>
       </section>
 
-      <section className="rounded-lg border border-line bg-white shadow-sm">
+      <section className="rounded-lg border border-line bg-white shadow-xs">
         <div className="border-b border-line px-4 py-3 sm:px-5">
           <h2 className="text-lg font-semibold text-ink">
             Snapshots de partidas
@@ -446,7 +446,7 @@ function ExistingClose({
       </section>
 
       {closeNotes ? (
-        <section className="rounded-lg border border-line bg-white p-4 shadow-sm sm:p-5">
+        <section className="rounded-lg border border-line bg-white p-4 shadow-xs sm:p-5">
           <h2 className="text-lg font-semibold text-ink">Notas del cierre</h2>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted">
             {closeNotes}
@@ -513,7 +513,7 @@ function BucketVariation({ value }: { value: number | null }) {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-white p-4 shadow-xs">
       <p className="text-sm font-medium text-muted">{label}</p>
       <p className="amount-text mt-2 text-2xl font-semibold text-ink">
         {currencyFormatter.format(value)}
