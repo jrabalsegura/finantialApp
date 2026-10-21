@@ -108,6 +108,7 @@ function parseCategoryForm(formData: FormData) {
 
 function revalidateCategoryViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/categories");
   revalidatePath("/quick-templates");
   revalidatePath("/recurring");

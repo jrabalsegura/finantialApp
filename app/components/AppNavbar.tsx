@@ -8,7 +8,7 @@ import { logoutUser } from "../login/actions";
 const primaryItems = [
   { href: "/", label: "Dashboard" },
   { href: "/accounts", label: "Cuentas" },
-  { href: "/monthly-close", label: "Cierre" },
+  { href: "/transactions", label: "Movimientos" },
   { href: "/recurring", label: "Fijos" }
 ];
 
@@ -17,6 +17,7 @@ const secondaryItems = [
   { href: "/categories", label: "Categorías" },
   { href: "/reimbursements", label: "Pendientes" },
   { href: "/quick-templates", label: "Accesos rápidos" },
+  { href: "/monthly-close", label: "Cierre" },
   { href: "/history", label: "Histórico" },
   { href: "/settings/security", label: "Seguridad" },
   { href: "/settings/budget", label: "Objetivo semanal" },

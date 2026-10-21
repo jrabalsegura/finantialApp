@@ -81,6 +81,7 @@ async function main() {
   console.log("Worker: cargo vencido procesado sin abrir ninguna página.");
   for (const path of [
     "/",
+    "/transactions",
     "/accounts",
     "/savings",
     "/categories",

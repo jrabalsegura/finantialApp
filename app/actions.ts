@@ -1688,11 +1688,13 @@ function normalizeWeeklyBudgetImpactScope(
 
 function revalidateReimbursementViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/reimbursements");
 }
 
 function revalidateTransactionViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/accounts");
   revalidatePath("/reimbursements");
   revalidatePath("/savings");
@@ -1700,6 +1702,7 @@ function revalidateTransactionViews(): void {
 
 function revalidateAccountViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/accounts");
   revalidatePath("/reimbursements");
   revalidatePath("/savings");
@@ -1707,6 +1710,7 @@ function revalidateAccountViews(): void {
 
 function revalidateSavingsViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/savings");
   revalidatePath("/savings/[bucketId]", "page");
   revalidatePath("/monthly-close");
@@ -1714,6 +1718,7 @@ function revalidateSavingsViews(): void {
 
 function revalidateMonthlyCloseViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/accounts");
   revalidatePath("/history");
   revalidatePath("/monthly-close");

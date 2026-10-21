@@ -307,6 +307,7 @@ async function validateRecurringRelations(
 
 function revalidateRecurringViews(): void {
   revalidatePath("/");
+  revalidatePath("/transactions");
   revalidatePath("/accounts");
   revalidatePath("/monthly-close");
   revalidatePath("/recurring");

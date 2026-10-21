@@ -1,4 +1,3 @@
-import type { Prisma } from "@prisma/client";
 import {
   calculateCategoryTotals,
   calculateDashboardNetWorthVariation,
@@ -22,53 +21,6 @@ import { getQuickTemplates } from "./quick-transaction-templates";
 import { generateRecurringOccurrencesForMonth } from "./recurring-transactions";
 import { getWeeklyBudgetReport } from "./weekly-budget";
 
-const recentTransactionSelect = {
-  id: true,
-  accountId: true,
-  affectsMonthlySavings: true,
-  affectsNetWorth: true,
-  affectsPersonalExpense: true,
-  affectsPersonalIncome: true,
-  affectsRealBalance: true,
-  weeklyBudgetImpactScope: true,
-  amount: true,
-  categoryId: true,
-  createdAt: true,
-  date: true,
-  description: true,
-  destinationAccountId: true,
-  monthlyCloseId: true,
-  reimbursementId: true,
-  savingsTransferId: true,
-  savingsBucketId: true,
-  type: true,
-  account: {
-    select: {
-      id: true,
-      includeInMonthlySavings: true,
-      name: true
-    }
-  },
-  destinationAccount: {
-    select: {
-      id: true,
-      name: true
-    }
-  },
-  category: {
-    select: {
-      id: true,
-      name: true
-    }
-  },
-  originalReimbursement: {
-    select: { id: true }
-  },
-  recurringOccurrence: {
-    select: { id: true }
-  }
-} satisfies Prisma.TransactionSelect;
-
 export async function getDashboardData(referenceDate: Date = new Date()) {
   const currentYear = referenceDate.getFullYear();
   const currentMonth = referenceDate.getMonth() + 1;
@@ -79,8 +31,6 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
   const [
     accounts,
     categories,
-    recentTransactionsBase,
-    currentMonthRecentTransactions,
     monthlyTransactions,
     reimbursements,
     savingsBuckets,
@@ -110,21 +60,6 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         name: true,
         type: true
       }
-    }),
-    prisma.transaction.findMany({
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: 10,
-      select: recentTransactionSelect
-    }),
-    prisma.transaction.findMany({
-      where: {
-        date: {
-          gte: currentMonthRange.start,
-          lt: currentMonthRange.end
-        }
-      },
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      select: recentTransactionSelect
     }),
     prisma.transaction.findMany({
       where: {
@@ -226,10 +161,6 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
   const pendingRecurringOccurrences = recurringOccurrences.filter(
     (occurrence) => occurrence.status === "pending"
   );
-  const recentTransactionsBaseMerged = mergeRecentTransactions(
-    recentTransactionsBase,
-    currentMonthRecentTransactions
-  );
   const longTermBalance = calculateLongTermBucketBalance(accounts);
   const displaySavingsBuckets = savingsBuckets.map((bucket) => ({
     ...bucket,
@@ -239,8 +170,6 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
         }
       : bucket.currentAmount
   }));
-  const latestClosedPeriod = monthlyCloses[0];
-  const recentTransactions = recentTransactionsBaseMerged.map(transaction => ({ ...transaction, isPeriodClosed: !!latestClosedPeriod && (transaction.date.getFullYear() * 12 + transaction.date.getMonth() <= latestClosedPeriod.year * 12 + latestClosedPeriod.month - 1) }));
   const manualSavingsBuckets = displaySavingsBuckets.filter(
     (bucket) => !bucket.isLongTerm
   );
@@ -266,7 +195,6 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
     currentYear,
     accounts,
     categories,
-    recentTransactions,
     reimbursements,
     savingsBuckets: displaySavingsBuckets,
     weeklyBudgetReport,
@@ -326,26 +254,4 @@ export async function getDashboardData(referenceDate: Date = new Date()) {
           toMoneyNumber(reimbursement.paidAmount))
       }))
   };
-}
-
-function mergeRecentTransactions<
-  Transaction extends { createdAt: Date; date: Date; id: string }
->(...transactionGroups: Transaction[][]): Transaction[] {
-  const transactionsById = new Map<string, Transaction>();
-
-  for (const transactions of transactionGroups) {
-    for (const transaction of transactions) {
-      transactionsById.set(transaction.id, transaction);
-    }
-  }
-
-  return Array.from(transactionsById.values()).sort((left, right) => {
-    const dateDifference = right.date.getTime() - left.date.getTime();
-
-    if (dateDifference !== 0) {
-      return dateDifference;
-    }
-
-    return right.createdAt.getTime() - left.createdAt.getTime();
-  });
 }

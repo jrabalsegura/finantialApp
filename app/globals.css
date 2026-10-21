@@ -309,12 +309,12 @@ a {
     grid-row: 2;
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(4, auto);
   }
 
   .primary-navigation .app-nav-item {
     justify-content: center;
-    padding: 0 0.5rem;
+    padding: 0 0.25rem;
   }
 
   .more-navigation {
