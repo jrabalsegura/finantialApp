@@ -9,9 +9,9 @@ adelanta trabajo de la fase siguiente.
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| M1 | Node 24 | En PR, pendiente de desplegar |
-| M2 | Next 16 | En PR, pendiente de desplegar |
-| M3 | Tailwind 4 | En PR, pendiente de desplegar |
+| M1 | Node 24 | Hecha (desplegada el 21-10-2026) |
+| M2 | Next 16 | Hecha (desplegada el 21-10-2026) |
+| M3 | Tailwind 4 | Hecha (desplegada el 21-10-2026) |
 
 Orden recomendado: M1 primero por la fecha límite; M2 cierra las alertas altas
 de Dependabot que quedan (`postcss` dentro de Next 15 y `deepmerge-ts`); M3
@@ -52,7 +52,7 @@ versión que ya usan meteocentro y la web de Julio.
 - [x] `make container-up && make container-check` correctos; `node -v` dentro
       del contenedor muestra v24.
 - [x] El worker de recurrentes arranca y procesa en el contenedor.
-- [ ] Desplegada con `make deploy` y smoke test público correcto.
+- [x] Desplegada con `make deploy` y smoke test público correcto.
 
 ---
 
@@ -89,14 +89,14 @@ vulnerabilidades de npm audit»).
 
 ### Criterios de aceptación
 
-- [ ] `make check` y el CI en verde; sin alertas abiertas de `postcss` ni de
+- [x] `make check` y el CI en verde; sin alertas abiertas de `postcss` ni de
       `deepmerge-ts` en Dependabot tras fusionar.
 - [x] Sin sesión, cualquier ruta privada redirige al login; con sesión, se
       puede navegar por todas las pantallas; cerrar sesión y cambiar la
       contraseña siguen revocando las sesiones.
 - [x] Una ruta inexistente muestra la página 404.
 - [x] `make container-up && make container-check` correctos.
-- [ ] Desplegada con `make deploy` y smoke test público correcto.
+- [x] Desplegada con `make deploy` y smoke test público correcto.
 
 ---
 
@@ -134,4 +134,4 @@ puede corregir en Tailwind 3).
       plantillas rápidas, recurrentes, reembolsos, ahorro, presupuesto
       semanal, cierre mensual, ajustes y login): mismos colores, bordes,
       anillos de foco y espaciados.
-- [ ] Desplegada con `make deploy` y smoke test público correcto.
+- [x] Desplegada con `make deploy` y smoke test público correcto.
