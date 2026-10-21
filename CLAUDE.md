@@ -19,6 +19,8 @@ make deploy          # despliega origin/main en el servidor (ver docs/DEPLOY.md 
 
 El CI de GitHub repite `make check` y el smoke test del contenedor; Dependabot
 abre los PRs de dependencias (docs/DEPLOY.md §12, "Mantenimiento").
+Las migraciones de versiones mayores (Node 24, Next 16, Tailwind 4) están
+planificadas como fases en `docs/ROADMAP.md`: implementa solo la fase pedida.
 
 Un test concreto: `node --import tsx --test --test-name-pattern "reembolso" tests/*.test.cjs`.
 
