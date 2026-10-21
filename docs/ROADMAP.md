@@ -10,7 +10,7 @@ adelanta trabajo de la fase siguiente.
 | Fase | Contenido | Estado |
 |---|---|---|
 | M1 | Node 24 | En PR, pendiente de desplegar |
-| M2 | Next 16 | Pendiente |
+| M2 | Next 16 | En PR, pendiente de desplegar |
 | M3 | Tailwind 4 | Pendiente |
 
 Orden recomendado: M1 primero por la fecha límite; M2 cierra las alertas altas
@@ -91,11 +91,11 @@ vulnerabilidades de npm audit»).
 
 - [ ] `make check` y el CI en verde; sin alertas abiertas de `postcss` ni de
       `deepmerge-ts` en Dependabot tras fusionar.
-- [ ] Sin sesión, cualquier ruta privada redirige al login; con sesión, se
+- [x] Sin sesión, cualquier ruta privada redirige al login; con sesión, se
       puede navegar por todas las pantallas; cerrar sesión y cambiar la
       contraseña siguen revocando las sesiones.
-- [ ] Una ruta inexistente muestra la página 404.
-- [ ] `make container-up && make container-check` correctos.
+- [x] Una ruta inexistente muestra la página 404.
+- [x] `make container-up && make container-check` correctos.
 - [ ] Desplegada con `make deploy` y smoke test público correcto.
 
 ---

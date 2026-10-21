@@ -511,7 +511,7 @@ administra la copia operativa.
 - Una vez al mes: fusiona los PRs de Dependabot con el CI en verde y haz
   `make deploy`, aunque no haya cambios propios, para que la imagen recoja los
   parches de la base. Un aviso de seguridad de algo accesible sin login
-  (Next.js, `middleware.ts`, login, health, la imagen base) se despliega el
+  (Next.js, `proxy.ts`, login, health, la imagen base) se despliega el
   mismo día.
 
 ## 13. Rollback

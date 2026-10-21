@@ -1,6 +1,6 @@
 # Finanzas personales
 
-App personal de finanzas en producción (un único usuario real). Next.js 15 (App
+App personal de finanzas en producción (un único usuario real). Next.js 16 (App
 Router, server actions) + React 19 + Prisma 6 + SQLite + Tailwind 3. Interfaz y
 mensajes en español; identificadores de código en inglés.
 
@@ -32,8 +32,8 @@ Un test concreto: `node --import tsx --test --test-name-pattern "reembolso" test
 - `app/**/actions.ts`: server actions. Parsean el `FormData` con
   `src/lib/form-data.ts` y delegan en `src/lib`.
 - `app/**/page.tsx`: server components `force-dynamic` que leen de Prisma.
-- `middleware.ts` (runtime Node): valida la cookie firmada y `sessionVersion`
-  contra la BD en cada petición y la renueva.
+- `proxy.ts` (el antiguo middleware; runtime Node): valida la cookie firmada y
+  `sessionVersion` contra la BD en cada petición y la renueva.
 - `scripts/recurring-worker.ts`: proceso aparte que confirma recurrentes
   automáticos cada minuto. Lo arranca `scripts/start.mjs` junto a Next.
 

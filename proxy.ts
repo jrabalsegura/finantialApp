@@ -16,7 +16,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/login"
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (isPublicPath(pathname)) {
@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
     request.cookies.get(SESSION_COOKIE_NAME)?.value
   );
 
-  // Node runtime lets the middleware check the DB, so a password change or a
+  // Proxy runs on Node, so it can check the DB: a password change or a
   // deleted user revokes existing cookies on the very next request.
   const user = session
     ? await prisma.appUser.findUnique({
@@ -71,7 +71,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  runtime: "nodejs",
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
 };
 
