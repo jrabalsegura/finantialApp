@@ -16,7 +16,7 @@ RUN npm run prisma:generate
 
 COPY app ./app
 COPY src ./src
-COPY middleware.ts next-env.d.ts next.config.mjs ./
+COPY proxy.ts next-env.d.ts next.config.mjs ./
 COPY postcss.config.js tailwind.config.ts tsconfig.json ./
 
 RUN DATABASE_URL=file:/tmp/build.db \
