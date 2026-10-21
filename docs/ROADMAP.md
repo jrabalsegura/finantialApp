@@ -9,7 +9,7 @@ adelanta trabajo de la fase siguiente.
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| M1 | Node 24 | Pendiente (antes de abril de 2027) |
+| M1 | Node 24 | En PR, pendiente de desplegar |
 | M2 | Next 16 | Pendiente |
 | M3 | Tailwind 4 | Pendiente |
 
@@ -47,11 +47,11 @@ versión que ya usan meteocentro y la web de Julio.
 
 ### Criterios de aceptación
 
-- [ ] `make check` en verde con Node 24 (incluidos los tests de integración con
+- [x] `make check` en verde con Node 24 (incluidos los tests de integración con
       `node:sqlite`) y el CI de GitHub en verde.
-- [ ] `make container-up && make container-check` correctos; `node -v` dentro
+- [x] `make container-up && make container-check` correctos; `node -v` dentro
       del contenedor muestra v24.
-- [ ] El worker de recurrentes arranca y procesa en el contenedor.
+- [x] El worker de recurrentes arranca y procesa en el contenedor.
 - [ ] Desplegada con `make deploy` y smoke test público correcto.
 
 ---

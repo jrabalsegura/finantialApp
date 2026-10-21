@@ -1,4 +1,4 @@
-FROM docker.io/library/node:22.23.2-bookworm-slim AS builder
+FROM docker.io/library/node:24.22.0-bookworm-slim AS builder
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -26,7 +26,7 @@ RUN DATABASE_URL=file:/tmp/build.db \
     && npm prune --omit=dev \
     && npm cache clean --force
 
-FROM docker.io/library/node:22.23.2-bookworm-slim AS runtime
+FROM docker.io/library/node:24.22.0-bookworm-slim AS runtime
 
 ARG APP_UID=10001
 ARG APP_GID=10001
